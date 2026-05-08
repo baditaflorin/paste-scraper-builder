@@ -5,12 +5,12 @@ export default defineConfig({
   timeout: 30_000,
   fullyParallel: true,
   use: {
-    baseURL: 'http://127.0.0.1:4173/paste-scraper-builder/',
+    baseURL: 'http://127.0.0.1:48731/paste-scraper-builder/',
     trace: 'on-first-retry',
   },
   webServer: {
-    command: 'npm run pages-preview -- --port 4173',
-    url: 'http://127.0.0.1:4173/paste-scraper-builder/',
+    command: 'npm run pages-preview -- --port 48731 --strictPort',
+    url: 'http://127.0.0.1:48731/paste-scraper-builder/',
     reuseExistingServer: !process.env.CI,
     timeout: 30_000,
   },
