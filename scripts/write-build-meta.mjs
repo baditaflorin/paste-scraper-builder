@@ -18,7 +18,7 @@ const meta = {
   app: packageJson.name,
   version: packageJson.version,
   commit: readGit('git rev-parse --short=12 HEAD', 'local-dev'),
-  generatedAt: new Date().toISOString(),
+  generatedAt: readGit('git show -s --format=%cI HEAD', new Date().toISOString()),
   repository: 'https://github.com/baditaflorin/paste-scraper-builder',
   paypal: 'https://www.paypal.com/paypalme/florinbadita',
 }
