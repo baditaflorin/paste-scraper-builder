@@ -1,0 +1,17 @@
+{
+  "name": "Paste Scraper Builder",
+  "short_name": "Scraper Builder",
+  "description": "Build scraper selectors from pasted rendered HTML and export CSV or code.",
+  "start_url": "/paste-scraper-builder/",
+  "scope": "/paste-scraper-builder/",
+  "display": "standalone",
+  "background_color": "#f8fafc",
+  "theme_color": "#0f766e",
+  "icons": [
+    {
+      "src": "/paste-scraper-builder/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}

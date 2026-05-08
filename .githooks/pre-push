@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+npm test
+npm run build
+test -f docs/index.html
+npm run smoke

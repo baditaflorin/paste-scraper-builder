@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+message_file="${1:-}"
+if [[ -z "$message_file" || ! -f "$message_file" ]]; then
+  echo "commit-msg hook needs a message file" >&2
+  exit 1
+fi
+
+first_line="$(head -n 1 "$message_file")"
+if [[ ! "$first_line" =~ ^(feat|fix|docs|chore|refactor|test|ops|data)(\([a-z0-9._-]+\))?:\ .+ ]]; then
+  echo "Commit message must use Conventional Commits, for example: feat: add selector picker" >&2
+  exit 1
+fi

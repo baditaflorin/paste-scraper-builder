@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Paste Scraper Builder</title>
+    <script>
+      const base = '/paste-scraper-builder/'
+      const path = window.location.pathname
+      if (!path.startsWith(base)) {
+        window.location.replace(base)
+      } else {
+        window.location.replace(base + window.location.search + window.location.hash)
+      }
+    </script>
+  </head>
+  <body></body>
+</html>
