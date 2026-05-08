@@ -6,7 +6,9 @@ const packageJson = JSON.parse(await readFile(new URL('../package.json', import.
 
 const readGit = (command, fallback) => {
   try {
-    return execSync(command, { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+    return execSync(command, { stdio: ['ignore', 'pipe', 'ignore'] })
+      .toString()
+      .trim()
   } catch {
     return fallback
   }

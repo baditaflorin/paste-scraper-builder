@@ -43,7 +43,11 @@ const attributeOptions = extractionAttributeSchema.options
 const selectorModes = selectorModeSchema.options
 
 const uniqueFieldName = (fields: FieldRule[], preferredName: string): string => {
-  const normalized = preferredName.trim().replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_]/g, '').toLowerCase()
+  const normalized = preferredName
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-zA-Z0-9_]/g, '')
+    .toLowerCase()
   const base = normalized || `field_${fields.length + 1}`
   const names = new Set(fields.map((field) => field.name))
   if (!names.has(base)) {
@@ -228,7 +232,13 @@ export function ScraperBuilder() {
                 <Play size={16} aria-hidden="true" />
                 <span>Sample</span>
               </button>
-              <button type="button" className="icon-button" title="Clear draft" aria-label="Clear draft" onClick={() => void resetProject()}>
+              <button
+                type="button"
+                className="icon-button"
+                title="Clear draft"
+                aria-label="Clear draft"
+                onClick={() => void resetProject()}
+              >
                 <Eraser size={17} aria-hidden="true" />
               </button>
             </div>
@@ -258,7 +268,11 @@ export function ScraperBuilder() {
                   <MousePointer2 size={15} aria-hidden="true" />
                   <span>Row</span>
                 </button>
-                <button type="button" className={pickMode === 'field' ? 'active' : ''} onClick={() => setPickMode('field')}>
+                <button
+                  type="button"
+                  className={pickMode === 'field' ? 'active' : ''}
+                  onClick={() => setPickMode('field')}
+                >
                   <Plus size={15} aria-hidden="true" />
                   <span>Field</span>
                 </button>
@@ -288,13 +302,22 @@ export function ScraperBuilder() {
               <label className="field-label" htmlFor="field-name">
                 Field
               </label>
-              <input id="field-name" value={fieldName} onChange={(event) => setFieldName(event.target.value)} autoComplete="off" />
+              <input
+                id="field-name"
+                value={fieldName}
+                onChange={(event) => setFieldName(event.target.value)}
+                autoComplete="off"
+              />
             </div>
             <div>
               <label className="field-label" htmlFor="attribute">
                 Value
               </label>
-              <select id="attribute" value={attribute} onChange={(event) => setAttribute(event.target.value as ExtractionAttribute)}>
+              <select
+                id="attribute"
+                value={attribute}
+                onChange={(event) => setAttribute(event.target.value as ExtractionAttribute)}
+              >
                 {attributeOptions.map((option) => (
                   <option key={option} value={option}>
                     {option}
@@ -373,7 +396,9 @@ export function ScraperBuilder() {
                   <input value={field.name} onChange={(event) => updateField(field.id, { name: event.target.value })} />
                   <select
                     value={field.attribute}
-                    onChange={(event) => updateField(field.id, { attribute: event.target.value as ExtractionAttribute })}
+                    onChange={(event) =>
+                      updateField(field.id, { attribute: event.target.value as ExtractionAttribute })
+                    }
                     aria-label={`${field.name} attribute`}
                   >
                     {attributeOptions.map((option) => (
@@ -382,8 +407,18 @@ export function ScraperBuilder() {
                       </option>
                     ))}
                   </select>
-                  <input value={field.selector} onChange={(event) => updateField(field.id, { selector: event.target.value })} aria-label={`${field.name} selector`} />
-                  <button type="button" className="icon-button" title="Remove field" aria-label="Remove field" onClick={() => removeField(field.id)}>
+                  <input
+                    value={field.selector}
+                    onChange={(event) => updateField(field.id, { selector: event.target.value })}
+                    aria-label={`${field.name} selector`}
+                  />
+                  <button
+                    type="button"
+                    className="icon-button"
+                    title="Remove field"
+                    aria-label="Remove field"
+                    onClick={() => removeField(field.id)}
+                  >
                     <Trash2 size={15} aria-hidden="true" />
                   </button>
                 </div>
@@ -425,7 +460,11 @@ export function ScraperBuilder() {
               <Table size={15} aria-hidden="true" />
               <span>CSV</span>
             </button>
-            <button type="button" className={exportTab === 'python' ? 'active' : ''} onClick={() => setExportTab('python')}>
+            <button
+              type="button"
+              className={exportTab === 'python' ? 'active' : ''}
+              onClick={() => setExportTab('python')}
+            >
               <FileCode2 size={15} aria-hidden="true" />
               <span>Python</span>
             </button>
@@ -436,7 +475,11 @@ export function ScraperBuilder() {
           </div>
 
           <div className="export-box">
-            <button type="button" className="copy-button" onClick={() => void copyText(activeExport, exportTab.toUpperCase())}>
+            <button
+              type="button"
+              className="copy-button"
+              onClick={() => void copyText(activeExport, exportTab.toUpperCase())}
+            >
               <Clipboard size={15} aria-hidden="true" />
               <span>Copy</span>
             </button>

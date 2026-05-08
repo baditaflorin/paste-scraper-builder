@@ -37,7 +37,8 @@ export const useBuildStatus = () => {
 
   const commit = useQuery({
     queryKey: ['github-main-commit'],
-    queryFn: () => fetchJson<GitHubCommit>('https://api.github.com/repos/baditaflorin/paste-scraper-builder/commits/main'),
+    queryFn: () =>
+      fetchJson<GitHubCommit>('https://api.github.com/repos/baditaflorin/paste-scraper-builder/commits/main'),
     staleTime: 60_000,
     retry: 1,
   })

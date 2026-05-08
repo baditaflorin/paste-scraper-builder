@@ -50,5 +50,4 @@ export const createPickerDocument = (html: string): string => {
   return `<!doctype html>${document.documentElement.outerHTML}`
 }
 
-export const normalizeText = (value: string | null | undefined): string =>
-  (value ?? '').replace(/\s+/g, ' ').trim()
+export const normalizeText = (value: string | null | undefined): string => (value ?? '').replace(/\s+/g, ' ').trim()

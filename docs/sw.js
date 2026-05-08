@@ -2,9 +2,7 @@ const CACHE_NAME = 'paste-scraper-builder-v0.1.0'
 const BASE = '/paste-scraper-builder/'
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll([BASE, `${BASE}manifest.webmanifest`])),
-  )
+  event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll([BASE, `${BASE}manifest.webmanifest`])))
   self.skipWaiting()
 })
 
