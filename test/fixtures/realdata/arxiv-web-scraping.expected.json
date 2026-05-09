@@ -12,5 +12,5 @@
     { "name": "submitted", "type": "date", "confidenceAtLeast": 0.55 },
     { "name": "pdf_url", "type": "url", "confidenceAtLeast": 0.65 }
   ],
-  "sampleMustContain": ["arXiv"]
+  "sampleMustContain": ["2605.06343"]
 }

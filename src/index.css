@@ -283,6 +283,17 @@ select {
   font-size: 13px;
 }
 
+.input-with-icon {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+}
+
+.input-with-icon svg {
+  color: var(--muted);
+}
+
 .control-grid,
 .field-preset {
   display: grid;
@@ -322,6 +333,74 @@ select {
   min-width: 0;
 }
 
+.inference-card,
+.settings-panel,
+.debug-panel {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+
+.inference-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  font-size: 12px;
+}
+
+.inference-card strong {
+  color: var(--text);
+  font-size: 13px;
+}
+
+.inference-card span {
+  color: var(--muted);
+}
+
+.inference-card.inferred {
+  border-color: #99f6e4;
+  background: var(--teal-soft);
+}
+
+.inference-card.partial,
+.inference-card.low_confidence {
+  border-color: #fcd34d;
+  background: var(--amber-soft);
+}
+
+.inference-card.actionable_error,
+.inference-card.too_large {
+  border-color: #fecdd3;
+  background: var(--rose-soft);
+}
+
+.settings-panel {
+  padding: 8px 10px;
+  font-size: 12px;
+}
+
+.settings-panel summary,
+.debug-panel summary {
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.settings-panel label {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  margin-top: 8px;
+  color: var(--text);
+}
+
+.settings-panel input[type='checkbox'] {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--teal);
+}
+
 .picker-panel {
   background: #dfe7f1;
 }
@@ -352,11 +431,26 @@ select {
   gap: 8px;
 }
 
+.field-rule-card {
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--panel-soft);
+}
+
 .field-rule {
   display: grid;
   grid-template-columns: minmax(84px, 0.8fr) 94px minmax(120px, 1.4fr) 34px;
   gap: 7px;
   align-items: center;
+}
+
+.field-meta {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .empty-state,
@@ -442,6 +536,18 @@ th {
   color: #f8fafc;
   border-color: #475569;
   background: #1f2937;
+}
+
+.debug-panel {
+  max-height: 220px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.debug-panel pre {
+  margin: 8px 0 0;
+  font-size: 11px;
+  white-space: pre-wrap;
 }
 
 .toast {

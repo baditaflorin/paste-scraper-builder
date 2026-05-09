@@ -8,6 +8,7 @@ import type {
   SelectorMode,
 } from './types'
 import { normalizeText, parseHtml, sanitizeHtml } from './dom'
+import { normalizeValue } from './normalization'
 
 const ignoredClasses = new Set(['psb-hover', 'psb-row', 'psb-field'])
 const preferredAttributes = ['data-testid', 'data-test', 'data-qa', 'data-sku', 'itemprop', 'name', 'aria-label']
@@ -28,7 +29,7 @@ const isElement = (node: Node | null): node is Element => node?.nodeType === Nod
 
 const hasElement = (elements: Element[], target: Element): boolean => elements.some((element) => element === target)
 
-const queryAll = (root: ParentNode, selector: string): Element[] => {
+export const queryAll = (root: ParentNode, selector: string): Element[] => {
   try {
     return Array.from(root.querySelectorAll(selector))
   } catch {
@@ -278,14 +279,35 @@ export const valueFromElement = (element: Element | undefined, attribute: Extrac
   return normalizeText(element.getAttribute(attribute))
 }
 
-const fieldValue = (row: Element, field: FieldRule): string => {
-  const [element] = field.selector === '.' ? [row] : selectElements(row, field.selector, field.selectorMode)
-  return valueFromElement(element, field.attribute)
+const contextForField = (document: Document, row: Element, field: FieldRule): Document | Element => {
+  if (field.scope === 'document') {
+    return document
+  }
+  if (field.scope === 'nextSibling') {
+    return row.nextElementSibling ?? row
+  }
+  return row
+}
+
+const fieldElements = (document: Document, row: Element, field: FieldRule): Element[] => {
+  const context = contextForField(document, row, field)
+  return field.selector === '.' && context instanceof Element
+    ? [context]
+    : selectElements(context, field.selector, field.selectorMode)
+}
+
+const fieldValue = (document: Document, row: Element, field: FieldRule, sourceUrl?: string): string => {
+  const elements = fieldElements(document, row, field)
+  const values = (field.multi ? elements : elements.slice(0, 1))
+    .map((element) => valueFromElement(element, field.attribute))
+    .filter(Boolean)
+  return normalizeValue(values.join('; '), field.fieldType, field.normalizer, sourceUrl)
 }
 
 export const extractPreview = (project: ScraperProject): PreviewResult => {
   const document = parseHtml(sanitizeHtml(project.html))
   const warnings: string[] = []
+  const fieldMatchCounts: Record<string, number> = {}
   const rows = project.rowSelector
     ? selectElements(document, project.rowSelector, project.rowSelectorMode)
     : document.body
@@ -308,12 +330,17 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
     warnings.push('Add at least one field selector.')
   }
 
-  const previewRows = rows.map((row) =>
-    Object.fromEntries(project.fields.map((field) => [field.name, fieldValue(row, field)])),
-  )
+  const previewRows = rows
+    .map((row) =>
+      Object.fromEntries(
+        project.fields.map((field) => [field.name, fieldValue(document, row, field, project.sourceUrl)]),
+      ),
+    )
+    .filter((row) => project.fields.length === 0 || Object.values(row).some((value) => value.trim()))
 
   project.fields.forEach((field) => {
-    const matchedCount = rows.filter((row) => selectElements(row, field.selector, field.selectorMode).length > 0).length
+    const matchedCount = rows.filter((row) => fieldElements(document, row, field).length > 0).length
+    fieldMatchCounts[field.name] = matchedCount
     if (rows.length > 0 && matchedCount === 0) {
       warnings.push(`Field "${field.name}" did not match inside any row.`)
     }
@@ -321,8 +348,9 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
 
   return {
     rows: previewRows,
-    rowCount: rows.length,
+    rowCount: previewRows.length,
     warnings,
+    fieldMatchCounts,
   }
 }
 

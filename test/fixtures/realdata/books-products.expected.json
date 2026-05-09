@@ -12,5 +12,5 @@
     { "name": "url", "type": "url", "confidenceAtLeast": 0.75 },
     { "name": "image", "type": "image", "confidenceAtLeast": 0.6 }
   ],
-  "sampleMustContain": ["A Light in the Attic", "£51.77"]
+  "sampleMustContain": ["A Light in the Attic", "GBP 51.77"]
 }

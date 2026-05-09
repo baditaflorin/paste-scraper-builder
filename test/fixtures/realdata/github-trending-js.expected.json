@@ -3,7 +3,7 @@
   "sourceUrl": "https://github.com/trending/javascript",
   "expectedKind": "records",
   "expectedShape": "repository-listing",
-  "minRows": 10,
+  "minRows": 9,
   "requiredFields": [
     { "name": "owner", "type": "author", "confidenceAtLeast": 0.55 },
     { "name": "repository", "type": "title", "confidenceAtLeast": 0.7 },

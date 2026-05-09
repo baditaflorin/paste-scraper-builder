@@ -1,8 +1,10 @@
+import { normalizeExtractedText, normalizeInputHtml } from './normalization'
+
 const unsafeElementSelector = 'script, iframe, object, embed, link[rel="preload"], link[rel="modulepreload"]'
 
 export const parseHtml = (html: string): Document => {
   const parser = new DOMParser()
-  return parser.parseFromString(html || '<!doctype html><html><body></body></html>', 'text/html')
+  return parser.parseFromString(normalizeInputHtml(html) || '<!doctype html><html><body></body></html>', 'text/html')
 }
 
 export const sanitizeHtml = (html: string): string => {
@@ -50,4 +52,4 @@ export const createPickerDocument = (html: string): string => {
   return `<!doctype html>${document.documentElement.outerHTML}`
 }
 
-export const normalizeText = (value: string | null | undefined): string => (value ?? '').replace(/\s+/g, ' ').trim()
+export const normalizeText = normalizeExtractedText

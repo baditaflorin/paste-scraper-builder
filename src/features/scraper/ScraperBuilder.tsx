@@ -6,20 +6,25 @@ import {
   Database,
   Eraser,
   ExternalLink,
+  FileJson,
+  FileUp,
   FileCode2,
   GitBranch,
   HeartHandshake,
+  Link2,
   MousePointer2,
   Play,
   Plus,
   Save,
+  Share2,
   Table,
   Trash2,
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useBuildStatus } from '../status/useBuildStatus'
 import { generateGoScraper, generatePythonScraper } from './codegen'
-import { rowsToCsv } from './csv'
+import { rowsToCsv, rowsToPlainCsv } from './csv'
+import { analyzeHtml, stableId } from './inference'
 import { PickerFrame } from './PickerFrame'
 import { sampleHtml } from './sampleHtml'
 import { extractPreview } from './selectorEngine'
@@ -27,9 +32,11 @@ import { clearDraft, loadDraft, saveDraft } from './storage'
 import {
   blankProject,
   extractionAttributeSchema,
+  scraperProjectSchema,
   selectorModeSchema,
   type ExtractionAttribute,
   type FieldRule,
+  type InferenceResult,
   type PickedFieldSelector,
   type PickedSelector,
   type ScraperProject,
@@ -37,10 +44,22 @@ import {
 } from './types'
 
 type PickMode = 'row' | 'field'
-type ExportTab = 'csv' | 'python' | 'go'
+type ExportTab = 'csv' | 'json' | 'python' | 'go'
+
+interface AppSettings {
+  autoInfer: boolean
+  includeProvenance: boolean
+}
 
 const attributeOptions = extractionAttributeSchema.options
 const selectorModes = selectorModeSchema.options
+const settingsKey = 'paste-scraper-builder-settings-v1'
+const hashPrefix = '#state='
+
+const defaultSettings: AppSettings = {
+  autoInfer: true,
+  includeProvenance: true,
+}
 
 const uniqueFieldName = (fields: FieldRule[], preferredName: string): string => {
   const normalized = preferredName
@@ -66,6 +85,67 @@ const updateTimestamp = (project: ScraperProject): ScraperProject => ({
   updatedAt: new Date().toISOString(),
 })
 
+const loadSettings = (): AppSettings => {
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(settingsKey) ?? '{}') as Partial<AppSettings>
+    return { ...defaultSettings, ...parsed }
+  } catch {
+    return defaultSettings
+  }
+}
+
+const encodeState = (project: ScraperProject): string => {
+  const bytes = new TextEncoder().encode(JSON.stringify(project))
+  let binary = ''
+  bytes.forEach((byte) => {
+    binary += String.fromCharCode(byte)
+  })
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
+}
+
+const decodeState = (state: string): ScraperProject | null => {
+  try {
+    const padded = state
+      .replace(/-/g, '+')
+      .replace(/_/g, '/')
+      .padEnd(Math.ceil(state.length / 4) * 4, '=')
+    const binary = atob(padded)
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
+    const parsed = JSON.parse(new TextDecoder().decode(bytes))
+    const result = scraperProjectSchema.safeParse(parsed)
+    return result.success ? result.data : null
+  } catch {
+    return null
+  }
+}
+
+const projectStateJson = (project: ScraperProject): string => `${JSON.stringify(project, null, 2)}\n`
+
+const confidenceLabel = (confidence = 0): string => {
+  if (confidence >= 0.75) {
+    return 'high'
+  }
+  if (confidence >= 0.5) {
+    return 'medium'
+  }
+  if (confidence > 0) {
+    return 'low'
+  }
+  return 'none'
+}
+
+const projectMatchesInference = (project: ScraperProject, inference: InferenceResult): boolean =>
+  project.rowSelector === inference.project.rowSelector &&
+  project.inferredShape === inference.project.inferredShape &&
+  project.inferenceConfidence === inference.project.inferenceConfidence &&
+  JSON.stringify(project.fields) === JSON.stringify(inference.project.fields) &&
+  JSON.stringify(project.anomalies ?? []) === JSON.stringify(inference.project.anomalies ?? [])
+
+const initialSharedProject =
+  typeof window === 'undefined' || !window.location.hash.startsWith(hashPrefix)
+    ? null
+    : decodeState(window.location.hash.slice(hashPrefix.length))
+
 const downloadText = (filename: string, contents: string, mimeType: string) => {
   const blob = new Blob([contents], { type: mimeType })
   const url = URL.createObjectURL(blob)
@@ -87,22 +167,34 @@ function LinkButton({ href, icon, label }: { href: string; icon: ReactNode; labe
 }
 
 export function ScraperBuilder() {
-  const [project, setProject] = useState<ScraperProject>(() => blankProject())
+  const [project, setProject] = useState<ScraperProject>(() =>
+    initialSharedProject ? updateTimestamp(initialSharedProject) : blankProject(),
+  )
+  const [settings, setSettings] = useState<AppSettings>(() => loadSettings())
   const [pickMode, setPickMode] = useState<PickMode>('row')
-  const [selectorMode, setSelectorMode] = useState<SelectorMode>('css')
+  const [selectorMode, setSelectorMode] = useState<SelectorMode>(() => initialSharedProject?.rowSelectorMode ?? 'css')
   const [fieldName, setFieldName] = useState('title')
   const [attribute, setAttribute] = useState<ExtractionAttribute>('text')
   const [exportTab, setExportTab] = useState<ExportTab>('csv')
-  const [toast, setToast] = useState('Ready.')
+  const [toast, setToast] = useState(initialSharedProject ? 'Project restored from share link.' : 'Ready.')
+  const [manualOverride, setManualOverride] = useState(Boolean(initialSharedProject))
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { meta, liveCommit } = useBuildStatus()
 
   useEffect(() => {
     let mounted = true
+    if (initialSharedProject) {
+      return () => {
+        mounted = false
+      }
+    }
+
     loadDraft()
       .then((draft) => {
         if (draft && mounted) {
           setProject(draft)
           setSelectorMode(draft.rowSelectorMode)
+          setManualOverride(Boolean(draft.rowSelector || draft.fields.length > 0))
           setToast('Local draft restored.')
         }
       })
@@ -112,6 +204,10 @@ export function ScraperBuilder() {
       mounted = false
     }
   }, [])
+
+  useEffect(() => {
+    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+  }, [settings])
 
   useEffect(() => {
     if (!project.html && project.fields.length === 0 && !project.rowSelector) {
@@ -125,8 +221,44 @@ export function ScraperBuilder() {
     return () => window.clearTimeout(handle)
   }, [project])
 
+  const inference = useMemo(
+    () => analyzeHtml(project.html, { sourceUrl: project.sourceUrl }),
+    [project.html, project.sourceUrl],
+  )
+
+  useEffect(() => {
+    if (!settings.autoInfer || manualOverride || !project.html.trim()) {
+      return
+    }
+    if (inference.status === 'too_large') {
+      const handle = window.setTimeout(() => setToast('HTML is above the automatic analysis budget.'), 0)
+      return () => window.clearTimeout(handle)
+    }
+    if (projectMatchesInference(project, inference)) {
+      return
+    }
+    const handle = window.setTimeout(() => {
+      setProject(updateTimestamp({ ...inference.project, html: project.html, sourceUrl: project.sourceUrl }))
+      setSelectorMode(inference.project.rowSelectorMode)
+      setPickMode(inference.fields.length > 0 ? 'field' : 'row')
+      setToast(
+        inference.status === 'actionable_error'
+          ? (inference.messages[0]?.what ?? 'Input needs attention.')
+          : `Detected ${inference.shape} with ${confidenceLabel(inference.confidence)} confidence.`,
+      )
+    }, 0)
+    return () => window.clearTimeout(handle)
+  }, [inference, manualOverride, project, settings.autoInfer])
+
   const preview = useMemo(() => extractPreview(project), [project])
-  const csv = useMemo(() => rowsToCsv(preview.rows, project.fields), [preview.rows, project.fields])
+  const csv = useMemo(
+    () =>
+      settings.includeProvenance
+        ? rowsToCsv(preview.rows, project.fields, project)
+        : rowsToPlainCsv(preview.rows, project.fields),
+    [preview.rows, project, settings.includeProvenance],
+  )
+  const json = useMemo(() => projectStateJson(project), [project])
   const python = useMemo(() => generatePythonScraper(project), [project])
   const go = useMemo(() => generateGoScraper(project), [project])
 
@@ -135,6 +267,7 @@ export function ScraperBuilder() {
   }
 
   const handlePickRow = (picked: PickedSelector) => {
+    setManualOverride(true)
     setProjectWithTimestamp((current) => ({
       ...current,
       rowSelector: picked[selectorMode],
@@ -145,12 +278,13 @@ export function ScraperBuilder() {
 
   const handlePickField = (picked: PickedFieldSelector) => {
     const name = uniqueFieldName(project.fields, fieldName)
+    setManualOverride(true)
     setProjectWithTimestamp((current) => ({
       ...current,
       fields: [
         ...current.fields,
         {
-          id: crypto.randomUUID(),
+          id: stableId('manual', name, picked[selectorMode], attribute, String(project.fields.length)),
           name,
           selector: picked[selectorMode],
           selectorMode,
@@ -162,6 +296,7 @@ export function ScraperBuilder() {
   }
 
   const updateField = (id: string, patch: Partial<FieldRule>) => {
+    setManualOverride(true)
     setProjectWithTimestamp((current) => ({
       ...current,
       fields: current.fields.map((field) => (field.id === id ? { ...field, ...patch } : field)),
@@ -169,6 +304,7 @@ export function ScraperBuilder() {
   }
 
   const removeField = (id: string) => {
+    setManualOverride(true)
     setProjectWithTimestamp((current) => ({
       ...current,
       fields: current.fields.filter((field) => field.id !== id),
@@ -186,22 +322,101 @@ export function ScraperBuilder() {
 
   const resetProject = async () => {
     setProject(blankProject())
+    setManualOverride(false)
     setPickMode('row')
     setFieldName('title')
+    window.history.replaceState(null, '', window.location.pathname + window.location.search)
     await clearDraft()
     setToast('Draft cleared.')
   }
 
   const loadSample = () => {
     setProject(updateTimestamp({ ...blankProject(), html: sampleHtml }))
+    setManualOverride(false)
     setPickMode('row')
     setFieldName('title')
     setToast('Sample loaded.')
   }
 
-  const activeExport = exportTab === 'csv' ? csv : exportTab === 'python' ? python : go
-  const activeExportName = exportTab === 'csv' ? 'extraction.csv' : exportTab === 'python' ? 'scraper.py' : 'scraper.go'
-  const activeExportMime = exportTab === 'csv' ? 'text/csv;charset=utf-8' : 'text/plain;charset=utf-8'
+  const applyHtmlInput = (html: string, sourceUrl?: string) => {
+    setManualOverride(false)
+    setProjectWithTimestamp((current) => ({
+      ...blankProject(),
+      html,
+      sourceUrl: sourceUrl ?? current.sourceUrl,
+    }))
+    setPickMode('row')
+  }
+
+  const importText = (text: string, label: string) => {
+    const parsed = scraperProjectSchema.safeParse(JSON.parse(text))
+    if (parsed.success) {
+      setProject(updateTimestamp(parsed.data))
+      setSelectorMode(parsed.data.rowSelectorMode)
+      setManualOverride(true)
+      setToast(`${label} project restored.`)
+      return
+    }
+    throw new Error('Not a project state file')
+  }
+
+  const handleFiles = async (files: FileList | File[]) => {
+    const [file] = Array.from(files)
+    if (!file) {
+      return
+    }
+    const text = await file.text()
+    if (file.name.endsWith('.json') || file.type.includes('json')) {
+      try {
+        importText(text, file.name)
+        return
+      } catch {
+        setToast('JSON file was not a Paste Scraper Builder project.')
+        return
+      }
+    }
+    applyHtmlInput(text)
+    setToast(`${file.name} loaded.`)
+  }
+
+  const readClipboard = async () => {
+    try {
+      const text = await navigator.clipboard.readText()
+      applyHtmlInput(text)
+      setToast('Clipboard HTML loaded.')
+    } catch {
+      setToast('Clipboard permission was denied. Use the paste box or upload an HTML file.')
+    }
+  }
+
+  const shareProject = async () => {
+    const encoded = encodeState(project)
+    if (encoded.length > 60_000) {
+      setToast('Project is too large for a share URL. Download the JSON state file instead.')
+      return
+    }
+    const url = `${window.location.origin}${window.location.pathname}${hashPrefix}${encoded}`
+    window.history.replaceState(null, '', `${window.location.pathname}${hashPrefix}${encoded}`)
+    await copyText(url, 'Share link')
+  }
+
+  const activeExport = exportTab === 'csv' ? csv : exportTab === 'json' ? json : exportTab === 'python' ? python : go
+  const activeExportName =
+    exportTab === 'csv'
+      ? 'extraction.csv'
+      : exportTab === 'json'
+        ? 'paste-scraper-project.json'
+        : exportTab === 'python'
+          ? 'scraper.py'
+          : 'scraper.go'
+  const activeExportMime =
+    exportTab === 'csv'
+      ? 'text/csv;charset=utf-8'
+      : exportTab === 'json'
+        ? 'application/json;charset=utf-8'
+        : 'text/plain;charset=utf-8'
+  const visibleMessages = [...inference.messages.map((entry) => `${entry.what} ${entry.nextStep}`), ...preview.warnings]
+  const debugEnabled = new URLSearchParams(window.location.search).get('debug') === '1'
 
   return (
     <div className="app-shell">
@@ -224,10 +439,48 @@ export function ScraperBuilder() {
       </header>
 
       <main className="builder-grid">
-        <section className="workspace-panel input-panel" aria-labelledby="input-heading">
+        <section
+          className="workspace-panel input-panel"
+          aria-labelledby="input-heading"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault()
+            void handleFiles(event.dataTransfer.files)
+          }}
+        >
           <div className="panel-heading">
             <h2 id="input-heading">Source</h2>
             <div className="button-row">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".html,.htm,.json,text/html,application/json"
+                hidden
+                onChange={(event) => {
+                  if (event.target.files) {
+                    void handleFiles(event.target.files)
+                  }
+                  event.target.value = ''
+                }}
+              />
+              <button
+                type="button"
+                className="icon-button"
+                title="Upload HTML or project JSON"
+                aria-label="Upload HTML or project JSON"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <FileUp size={17} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
+                title="Read clipboard"
+                aria-label="Read clipboard"
+                onClick={() => void readClipboard()}
+              >
+                <Clipboard size={17} aria-hidden="true" />
+              </button>
               <button type="button" className="tool-button" onClick={loadSample}>
                 <Play size={16} aria-hidden="true" />
                 <span>Sample</span>
@@ -252,13 +505,61 @@ export function ScraperBuilder() {
             className="html-input"
             spellCheck={false}
             value={project.html}
-            onChange={(event) =>
+            onChange={(event) => {
+              setManualOverride(false)
               setProjectWithTimestamp((current) => ({
                 ...current,
                 html: event.target.value,
               }))
-            }
+            }}
           />
+
+          <div className="selector-stack">
+            <label className="field-label" htmlFor="source-url">
+              Source URL
+            </label>
+            <div className="input-with-icon">
+              <Link2 size={15} aria-hidden="true" />
+              <input
+                id="source-url"
+                value={project.sourceUrl ?? ''}
+                placeholder="https://example.com/page"
+                onChange={(event) => {
+                  setManualOverride(false)
+                  setProjectWithTimestamp((current) => ({ ...current, sourceUrl: event.target.value || undefined }))
+                }}
+              />
+            </div>
+          </div>
+
+          <div className={`inference-card ${inference.status}`}>
+            <strong>{inference.shape === 'empty' ? 'Waiting for HTML' : `Detected ${inference.shape}`}</strong>
+            <span>
+              {confidenceLabel(inference.confidence)} confidence · {preview.rowCount} rows · {inference.strategy}
+            </span>
+          </div>
+
+          <details className="settings-panel">
+            <summary>Settings</summary>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.autoInfer}
+                onChange={(event) => setSettings((current) => ({ ...current, autoInfer: event.target.checked }))}
+              />
+              <span>Infer row pattern and fields after paste/upload</span>
+            </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={settings.includeProvenance}
+                onChange={(event) =>
+                  setSettings((current) => ({ ...current, includeProvenance: event.target.checked }))
+                }
+              />
+              <span>Include provenance and confidence columns in CSV</span>
+            </label>
+          </details>
 
           <div className="control-grid">
             <div>
@@ -334,13 +635,14 @@ export function ScraperBuilder() {
             <input
               id="row-selector"
               value={project.rowSelector}
-              onChange={(event) =>
+              onChange={(event) => {
+                setManualOverride(true)
                 setProjectWithTimestamp((current) => ({
                   ...current,
                   rowSelector: event.target.value,
                   rowSelectorMode: selectorMode,
                 }))
-              }
+              }}
             />
           </div>
         </section>
@@ -378,6 +680,15 @@ export function ScraperBuilder() {
               <button
                 type="button"
                 className="icon-button"
+                title="Copy share link"
+                aria-label="Copy share link"
+                onClick={() => void shareProject()}
+              >
+                <Share2 size={17} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="icon-button"
                 title="Download active export"
                 aria-label="Download active export"
                 onClick={() => downloadText(activeExportName, activeExport, activeExportMime)}
@@ -392,43 +703,52 @@ export function ScraperBuilder() {
               <div className="empty-state">No fields selected.</div>
             ) : (
               project.fields.map((field) => (
-                <div className="field-rule" key={field.id}>
-                  <input value={field.name} onChange={(event) => updateField(field.id, { name: event.target.value })} />
-                  <select
-                    value={field.attribute}
-                    onChange={(event) =>
-                      updateField(field.id, { attribute: event.target.value as ExtractionAttribute })
-                    }
-                    aria-label={`${field.name} attribute`}
-                  >
-                    {attributeOptions.map((option) => (
-                      <option key={option} value={option}>
-                        {option}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={field.selector}
-                    onChange={(event) => updateField(field.id, { selector: event.target.value })}
-                    aria-label={`${field.name} selector`}
-                  />
-                  <button
-                    type="button"
-                    className="icon-button"
-                    title="Remove field"
-                    aria-label="Remove field"
-                    onClick={() => removeField(field.id)}
-                  >
-                    <Trash2 size={15} aria-hidden="true" />
-                  </button>
+                <div className="field-rule-card" key={field.id}>
+                  <div className="field-rule">
+                    <input
+                      value={field.name}
+                      onChange={(event) => updateField(field.id, { name: event.target.value })}
+                    />
+                    <select
+                      value={field.attribute}
+                      onChange={(event) =>
+                        updateField(field.id, { attribute: event.target.value as ExtractionAttribute })
+                      }
+                      aria-label={`${field.name} attribute`}
+                    >
+                      {attributeOptions.map((option) => (
+                        <option key={option} value={option}>
+                          {option}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      value={field.selector}
+                      onChange={(event) => updateField(field.id, { selector: event.target.value })}
+                      aria-label={`${field.name} selector`}
+                    />
+                    <button
+                      type="button"
+                      className="icon-button"
+                      title="Remove field"
+                      aria-label="Remove field"
+                      onClick={() => removeField(field.id)}
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <p className="field-meta">
+                    {(field.fieldType ?? 'text').toUpperCase()} · {confidenceLabel(field.confidence)} confidence
+                    {field.reason ? ` · ${field.reason}` : ''}
+                  </p>
                 </div>
               ))
             )}
           </div>
 
-          {preview.warnings.length > 0 && (
+          {visibleMessages.length > 0 && (
             <div className="warnings" role="status">
-              {preview.warnings.slice(0, 3).map((warning) => (
+              {visibleMessages.slice(0, 4).map((warning) => (
                 <p key={warning}>{warning}</p>
               ))}
             </div>
@@ -460,6 +780,10 @@ export function ScraperBuilder() {
               <Table size={15} aria-hidden="true" />
               <span>CSV</span>
             </button>
+            <button type="button" className={exportTab === 'json' ? 'active' : ''} onClick={() => setExportTab('json')}>
+              <FileJson size={15} aria-hidden="true" />
+              <span>JSON</span>
+            </button>
             <button
               type="button"
               className={exportTab === 'python' ? 'active' : ''}
@@ -485,6 +809,13 @@ export function ScraperBuilder() {
             </button>
             <pre>{activeExport}</pre>
           </div>
+
+          {debugEnabled && (
+            <details className="debug-panel" open>
+              <summary>Debug</summary>
+              <pre>{JSON.stringify({ inference, preview, settings }, null, 2)}</pre>
+            </details>
+          )}
         </section>
       </main>
 

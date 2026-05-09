@@ -1,5 +1,7 @@
 import type { FieldRule, ScraperProject, SelectorMode } from './types'
 
+const appVersion = typeof __APP_VERSION__ === 'undefined' ? 'test' : __APP_VERSION__
+
 const stringLiteral = (value: string): string => JSON.stringify(value)
 
 const modeLiteral = (mode: SelectorMode): string => stringLiteral(mode)
@@ -10,15 +12,25 @@ const pythonFieldList = (fields: FieldRule[]): string =>
       (field) =>
         `{ "name": ${stringLiteral(field.name)}, "selector": ${stringLiteral(field.selector)}, "mode": ${modeLiteral(
           field.selectorMode,
-        )}, "attribute": ${stringLiteral(field.attribute)} }`,
+        )}, "attribute": ${stringLiteral(field.attribute)}, "type": ${stringLiteral(field.fieldType ?? 'text')}, "confidence": ${
+          field.confidence ?? 0
+        }, "scope": ${stringLiteral(field.scope ?? 'row')}, "multi": ${field.multi ? 'True' : 'False'}, "normalizer": ${stringLiteral(
+          field.normalizer ?? '',
+        )} }`,
     )
     .join(',\n    ')
 
 export const generatePythonScraper = (project: ScraperProject): string => `from pathlib import Path
 from parsel import Selector
+import re
 
 # pip install parsel
 HTML_PATH = "page.html"
+APP_VERSION = ${stringLiteral(appVersion)}
+SCHEMA_VERSION = ${stringLiteral(project.schemaVersion ?? '2.0.0')}
+SOURCE_URL = ${stringLiteral(project.sourceUrl ?? '')}
+INFERRED_SHAPE = ${stringLiteral(project.inferredShape ?? 'manual')}
+INFERENCE_CONFIDENCE = ${project.inferenceConfidence ?? 0}
 ROW_SELECTOR = ${stringLiteral(project.rowSelector)}
 ROW_MODE = ${modeLiteral(project.rowSelectorMode)}
 FIELDS = [
@@ -35,6 +47,30 @@ def select(context, selector, mode):
 def clean(value):
     return " ".join((value or "").split())
 
+def normalize(value, field):
+    text = clean(value)
+    normalizer = field.get("normalizer") or field.get("type")
+    if normalizer in ("price",):
+        amount = re.search(r"-?\\d[\\d,.]*", text)
+        if not amount:
+            return text
+        prefix = {"£": "GBP", "$": "USD", "€": "EUR"}.get(text[:1], "")
+        return f"{prefix + ' ' if prefix else ''}{amount.group(0).replace(',', '')}"
+    if normalizer in ("number", "count", "comments"):
+        amount = re.search(r"-?\\d[\\d,.]*", text)
+        return amount.group(0).replace(",", "") if amount else ""
+    if normalizer == "githubOwner":
+        return "".join(text.split()).split("/")[0]
+    if normalizer == "githubRepo":
+        parts = "".join(text.split()).split("/")
+        return parts[1] if len(parts) > 1 else text
+    if normalizer == "arxivId":
+        match = re.search(r"arXiv:\\s*(\\S+)", text, re.I)
+        return match.group(1) if match else text
+    if normalizer == "list":
+        return "; ".join([part.strip() for part in re.split(r"\\s*;\\s*|\\s*,\\s*", text) if part.strip()])
+    return text
+
 def extract_value(selection, attribute):
     if not selection:
         return ""
@@ -49,10 +85,23 @@ root = Selector(text=Path(HTML_PATH).read_text(encoding="utf-8"))
 rows = root.css(ROW_SELECTOR) if ROW_MODE == "css" else root.xpath(ROW_SELECTOR)
 records = []
 
-for row in rows:
+for index, row in enumerate(rows):
     record = {}
     for field in FIELDS:
-        record[field["name"]] = extract_value(select(row, field["selector"], field["mode"]), field["attribute"])
+        context = row
+        if field["scope"] == "nextSibling" and index + 1 < len(rows):
+            context = rows[index + 1]
+        selections = select(context, field["selector"], field["mode"])
+        if field["multi"]:
+            record[field["name"]] = normalize("; ".join(extract_value([item], field["attribute"]) for item in selections), field)
+        else:
+            record[field["name"]] = normalize(extract_value(selections, field["attribute"]), field)
+        record[f'{field["name"]}__confidence'] = field["confidence"]
+        record[f'{field["name"]}__type'] = field["type"]
+    record["_psb_app_version"] = APP_VERSION
+    record["_psb_schema_version"] = SCHEMA_VERSION
+    record["_psb_shape"] = INFERRED_SHAPE
+    record["_psb_source_url"] = SOURCE_URL
     records.append(record)
 
 print(records)
@@ -64,7 +113,11 @@ const goFieldList = (fields: FieldRule[]): string =>
       (field) =>
         `{Name: ${stringLiteral(field.name)}, Selector: ${stringLiteral(field.selector)}, Mode: ${modeLiteral(
           field.selectorMode,
-        )}, Attribute: ${stringLiteral(field.attribute)}}`,
+        )}, Attribute: ${stringLiteral(field.attribute)}, Type: ${stringLiteral(field.fieldType ?? 'text')}, Confidence: ${
+          field.confidence ?? 0
+        }, Scope: ${stringLiteral(field.scope ?? 'row')}, Multi: ${field.multi ? 'true' : 'false'}, Normalizer: ${stringLiteral(
+          field.normalizer ?? '',
+        )}}`,
     )
     .join(',\n\t')
 
@@ -75,6 +128,7 @@ import (
 \t"encoding/csv"
 \t"fmt"
 \t"os"
+\t"regexp"
 \t"strings"
 
 \t"github.com/andybalholm/cascadia"
@@ -87,7 +141,17 @@ type Field struct {
 \tSelector  string
 \tMode      string
 \tAttribute string
+\tType      string
+\tConfidence float64
+\tScope     string
+\tMulti     bool
+\tNormalizer string
 }
+
+const appVersion = ${stringLiteral(appVersion)}
+const schemaVersion = ${stringLiteral(project.schemaVersion ?? '2.0.0')}
+const sourceURL = ${stringLiteral(project.sourceUrl ?? '')}
+const inferredShape = ${stringLiteral(project.inferredShape ?? 'manual')}
 
 var fields = []Field{
 \t${goFieldList(project.fields)},
@@ -141,6 +205,37 @@ func value(node *html.Node, attribute string) string {
 \treturn attr(node, attribute)
 }
 
+func normalize(value string, field Field) string {
+\ttext := clean(value)
+\tnormalizer := field.Normalizer
+\tif normalizer == "" {
+\t\tnormalizer = field.Type
+\t}
+\tnumber := regexp.MustCompile(\`-?\\d[\\d,.]*\`)
+\tif normalizer == "number" || normalizer == "count" || normalizer == "comments" {
+\t\tmatch := number.FindString(text)
+\t\treturn strings.ReplaceAll(match, ",", "")
+\t}
+\tif normalizer == "price" {
+\t\tmatch := strings.ReplaceAll(number.FindString(text), ",", "")
+\t\tif strings.Contains(text, "£") {
+\t\t\treturn "GBP " + match
+\t\t}
+\t\tif strings.Contains(text, "$") {
+\t\t\treturn "USD " + match
+\t\t}
+\t\treturn match
+\t}
+\tif normalizer == "githubOwner" || normalizer == "githubRepo" {
+\t\tparts := strings.Split(strings.ReplaceAll(text, " ", ""), "/")
+\t\tif normalizer == "githubRepo" && len(parts) > 1 {
+\t\t\treturn parts[1]
+\t\t}
+\t\treturn parts[0]
+\t}
+\treturn text
+}
+
 func main() {
 \tfile, err := os.Open("page.html")
 \tif err != nil {
@@ -161,16 +256,20 @@ func main() {
 \tfor i, field := range fields {
 \t\theaders[i] = field.Name
 \t}
+\theaders = append(headers, "_psb_app_version", "_psb_schema_version", "_psb_shape", "_psb_source_url")
 \t_ = writer.Write(headers)
 
 \tfor _, row := range rows {
-\t\trecord := make([]string, len(fields))
+\t\trecord := make([]string, 0, len(fields)+4)
 \t\tfor i, field := range fields {
 \t\t\tmatches := selectNodes(row, field.Selector, field.Mode)
 \t\t\tif len(matches) > 0 {
-\t\t\t\trecord[i] = value(matches[0], field.Attribute)
+\t\t\t\trecord = append(record, normalize(value(matches[0], field.Attribute), field))
+\t\t\t} else {
+\t\t\t\trecord = append(record, "")
 \t\t\t}
 \t\t}
+\t\trecord = append(record, appVersion, schemaVersion, inferredShape, sourceURL)
 \t\t_ = writer.Write(record)
 \t}
 
