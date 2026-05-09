@@ -10,8 +10,10 @@ import {
   FileUp,
   FileCode2,
   GitBranch,
+  Globe,
   HeartHandshake,
   Link2,
+  Loader2,
   MousePointer2,
   Play,
   Plus,
@@ -125,6 +127,7 @@ export function ScraperBuilder() {
   const [exportTab, setExportTab] = useState<ExportTab>('csv')
   const [toast, setToast] = useState(initialSharedProject ? 'Project restored from share link.' : 'Ready.')
   const [manualOverride, setManualOverride] = useState(Boolean(initialSharedProject))
+  const [fetching, setFetching] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { meta, liveCommit } = useBuildStatus()
 
@@ -347,6 +350,58 @@ export function ScraperBuilder() {
     }
   }
 
+  const fetchUrlDirect = async (url: string) => {
+    setFetching(true)
+    setToast('Fetching…')
+    // Update sourceUrl in project so it's stored
+    setProjectWithTimestamp((current) => ({ ...current, sourceUrl: url }))
+    try {
+      let html = ''
+      let via = 'direct'
+
+      // 1. Try direct fetch — works when the server sends CORS headers
+      try {
+        const res = await fetch(url, { signal: AbortSignal.timeout(10_000) })
+        if (res.ok) html = await res.text()
+      } catch {
+        // CORS / network blocked — fall through to proxy
+      }
+
+      // 2. CORS proxy fallback (corsproxy.io is free, no key needed)
+      if (!html) {
+        via = 'proxy'
+        const proxyUrl = `https://corsproxy.io/?url=${encodeURIComponent(url)}`
+        const res = await fetch(proxyUrl, { signal: AbortSignal.timeout(15_000) })
+        if (!res.ok) throw new Error(`Proxy returned ${res.status}. The site may block external fetches.`)
+        html = await res.text()
+      }
+
+      if (!html.trim()) throw new Error('Server returned an empty page.')
+
+      applyHtmlInput(html, url)
+      setToast(
+        via === 'proxy'
+          ? 'Loaded via CORS proxy. Note: JS-rendered sites (React/Next/Vue) show only the server HTML — for those, use Ctrl+U in your browser and paste the source here.'
+          : 'Page loaded.',
+      )
+    } catch (err) {
+      setToast(
+        `Failed: ${err instanceof Error ? err.message : String(err)}. Try Ctrl+U in your browser → copy all → paste in the HTML box below.`,
+      )
+    } finally {
+      setFetching(false)
+    }
+  }
+
+  const fetchUrl = async () => {
+    const url = project.sourceUrl?.trim()
+    if (!url) {
+      setToast('Enter a URL above, then click Fetch.')
+      return
+    }
+    await fetchUrlDirect(url)
+  }
+
   const shareProject = async () => {
     const encoded = encodeProjectState(project)
     if (encoded.length > 60_000) {
@@ -474,46 +529,79 @@ export function ScraperBuilder() {
 
           <div className="selector-stack">
             <label className="field-label" htmlFor="source-url">
-              Source URL
+              Load URL
             </label>
-            <div className="input-with-icon">
-              <Link2 size={15} aria-hidden="true" />
-              <input
-                id="source-url"
-                value={project.sourceUrl ?? ''}
-                placeholder="https://example.com/page"
-                onChange={(event) => {
-                  setManualOverride(false)
-                  setProjectWithTimestamp((current) => ({ ...current, sourceUrl: event.target.value || undefined }))
-                }}
-              />
+            <div className="url-fetch-row">
+              <div className="input-with-icon">
+                <Link2 size={15} aria-hidden="true" />
+                <input
+                  id="source-url"
+                  value={project.sourceUrl ?? ''}
+                  placeholder="https://example.com/products"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void fetchUrl()
+                  }}
+                  onChange={(event) => {
+                    setProjectWithTimestamp((current) => ({
+                      ...current,
+                      sourceUrl: event.target.value || undefined,
+                    }))
+                  }}
+                />
+              </div>
+              <button
+                type="button"
+                className="fetch-button"
+                disabled={fetching || !project.sourceUrl?.trim()}
+                onClick={() => void fetchUrl()}
+                title="Fetch page HTML"
+                aria-label="Fetch page HTML"
+              >
+                {fetching ? (
+                  <Loader2 size={14} className="spin" aria-hidden="true" />
+                ) : (
+                  <Globe size={14} aria-hidden="true" />
+                )}
+                <span>{fetching ? 'Loading…' : 'Fetch'}</span>
+              </button>
             </div>
+            {inference.nextPageUrl && (
+              <div className="next-page-row">
+                <span className="field-label">Next page</span>
+                <div className="next-page-controls">
+                  <code
+                    className="next-page-url"
+                    title={inference.nextPageUrl}
+                  >
+                    {inference.nextPageUrl.length > 55
+                      ? `${inference.nextPageUrl.slice(0, 55)}…`
+                      : inference.nextPageUrl}
+                  </code>
+                  <button
+                    type="button"
+                    className="fetch-button fetch-button--next"
+                    disabled={fetching}
+                    onClick={() => void fetchUrlDirect(inference.nextPageUrl!)}
+                    title="Fetch next page"
+                  >
+                    {fetching ? (
+                      <Loader2 size={14} className="spin" aria-hidden="true" />
+                    ) : (
+                      <Globe size={14} aria-hidden="true" />
+                    )}
+                    <span>Fetch next</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className={`inference-card ${inference.status}`}>
-            <strong>{inference.shape === 'empty' ? 'Waiting for HTML' : `Detected ${inference.shape}`}</strong>
+            <strong>{inference.shape === 'empty' ? 'Enter a URL or paste HTML below' : `Detected ${inference.shape}`}</strong>
             <span>
-              {confidenceLabel(inference.confidence)} confidence · {preview.rowCount} rows · {inference.strategy}
+              {inference.shape !== 'empty' &&
+                `${confidenceLabel(inference.confidence)} confidence · ${preview.rowCount} rows · ${inference.strategy}`}
             </span>
-            {inference.nextPageUrl && (
-              <span className="next-page-hint">
-                Next page:{' '}
-                <code title={inference.nextPageUrl}>
-                  {inference.nextPageUrl.length > 60
-                    ? `${inference.nextPageUrl.slice(0, 60)}…`
-                    : inference.nextPageUrl}
-                </code>
-                <button
-                  type="button"
-                  className="icon-button"
-                  title="Copy next-page URL"
-                  aria-label="Copy next-page URL"
-                  onClick={() => void copyText(inference.nextPageUrl!, 'Next-page URL')}
-                >
-                  <Clipboard size={13} aria-hidden="true" />
-                </button>
-              </span>
-            )}
           </div>
 
           <details className="settings-panel">
