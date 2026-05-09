@@ -1,0 +1,13 @@
+{
+  "id": "quotes",
+  "sourceUrl": "https://quotes.toscrape.com/",
+  "expectedKind": "records",
+  "expectedShape": "quote-listing",
+  "minRows": 10,
+  "requiredFields": [
+    { "name": "quote", "type": "text", "confidenceAtLeast": 0.8 },
+    { "name": "author", "type": "author", "confidenceAtLeast": 0.8 },
+    { "name": "tags", "type": "list", "confidenceAtLeast": 0.65 }
+  ],
+  "sampleMustContain": ["Albert Einstein", "change"]
+}

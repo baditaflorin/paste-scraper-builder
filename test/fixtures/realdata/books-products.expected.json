@@ -1,0 +1,16 @@
+{
+  "id": "books-products",
+  "sourceUrl": "https://books.toscrape.com/catalogue/page-1.html",
+  "expectedKind": "records",
+  "expectedShape": "product-listing",
+  "minRows": 20,
+  "requiredFields": [
+    { "name": "title", "type": "title", "confidenceAtLeast": 0.75 },
+    { "name": "price", "type": "price", "confidenceAtLeast": 0.75 },
+    { "name": "rating", "type": "rating", "confidenceAtLeast": 0.65 },
+    { "name": "availability", "type": "status", "confidenceAtLeast": 0.6 },
+    { "name": "url", "type": "url", "confidenceAtLeast": 0.75 },
+    { "name": "image", "type": "image", "confidenceAtLeast": 0.6 }
+  ],
+  "sampleMustContain": ["A Light in the Attic", "£51.77"]
+}

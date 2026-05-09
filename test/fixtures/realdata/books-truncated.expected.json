@@ -1,0 +1,13 @@
+{
+  "id": "books-truncated",
+  "sourceUrl": "https://books.toscrape.com/catalogue/page-1.html",
+  "expectedKind": "records_with_warning",
+  "expectedShape": "product-listing",
+  "minRows": 1,
+  "requiredFields": [
+    { "name": "title", "type": "title", "confidenceAtLeast": 0.5 },
+    { "name": "price", "type": "price", "confidenceAtLeast": 0.45 }
+  ],
+  "requiredAnomalies": ["partial_input"],
+  "sampleMustContain": ["A Light in the Attic"]
+}

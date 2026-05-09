@@ -1,0 +1,17 @@
+{
+  "id": "github-trending-js",
+  "sourceUrl": "https://github.com/trending/javascript",
+  "expectedKind": "records",
+  "expectedShape": "repository-listing",
+  "minRows": 10,
+  "requiredFields": [
+    { "name": "owner", "type": "author", "confidenceAtLeast": 0.55 },
+    { "name": "repository", "type": "title", "confidenceAtLeast": 0.7 },
+    { "name": "url", "type": "url", "confidenceAtLeast": 0.7 },
+    { "name": "description", "type": "text", "confidenceAtLeast": 0.45 },
+    { "name": "language", "type": "tag", "confidenceAtLeast": 0.55 },
+    { "name": "stars", "type": "count", "confidenceAtLeast": 0.5 },
+    { "name": "stars_today", "type": "count", "confidenceAtLeast": 0.5 }
+  ],
+  "requiredAnomalies": ["navigation_ignored"]
+}

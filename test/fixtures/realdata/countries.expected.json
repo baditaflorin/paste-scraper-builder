@@ -1,0 +1,14 @@
+{
+  "id": "countries",
+  "sourceUrl": "https://www.scrapethissite.com/pages/simple/",
+  "expectedKind": "records",
+  "expectedShape": "country-listing",
+  "minRows": 200,
+  "requiredFields": [
+    { "name": "country", "type": "title", "confidenceAtLeast": 0.85 },
+    { "name": "capital", "type": "text", "confidenceAtLeast": 0.75 },
+    { "name": "population", "type": "number", "confidenceAtLeast": 0.8 },
+    { "name": "area", "type": "number", "confidenceAtLeast": 0.75 }
+  ],
+  "sampleMustContain": ["Andorra", "84000"]
+}

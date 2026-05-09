@@ -1,0 +1,16 @@
+{
+  "id": "arxiv-web-scraping",
+  "sourceUrl": "https://arxiv.org/search/?query=web+scraping&searchtype=all",
+  "expectedKind": "records",
+  "expectedShape": "search-results",
+  "minRows": 20,
+  "requiredFields": [
+    { "name": "id", "type": "identifier", "confidenceAtLeast": 0.7 },
+    { "name": "title", "type": "title", "confidenceAtLeast": 0.7 },
+    { "name": "authors", "type": "list", "confidenceAtLeast": 0.65 },
+    { "name": "abstract", "type": "text", "confidenceAtLeast": 0.55 },
+    { "name": "submitted", "type": "date", "confidenceAtLeast": 0.55 },
+    { "name": "pdf_url", "type": "url", "confidenceAtLeast": 0.65 }
+  ],
+  "sampleMustContain": ["arXiv"]
+}

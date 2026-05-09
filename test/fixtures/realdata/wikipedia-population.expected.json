@@ -1,0 +1,14 @@
+{
+  "id": "wikipedia-population",
+  "sourceUrl": "https://en.wikipedia.org/wiki/List_of_countries_and_dependencies_by_population",
+  "expectedKind": "records",
+  "expectedShape": "data-table",
+  "minRows": 100,
+  "requiredFields": [
+    { "name": "country", "type": "title", "confidenceAtLeast": 0.65 },
+    { "name": "population", "type": "number", "confidenceAtLeast": 0.65 },
+    { "name": "date", "type": "date", "confidenceAtLeast": 0.45 }
+  ],
+  "requiredAnomalies": ["table_cleanup"],
+  "sampleMustContain": ["China", "India"]
+}

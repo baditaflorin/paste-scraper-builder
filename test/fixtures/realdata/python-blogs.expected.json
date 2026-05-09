@@ -1,0 +1,13 @@
+{
+  "id": "python-blogs",
+  "sourceUrl": "https://www.python.org/blogs/",
+  "expectedKind": "records",
+  "expectedShape": "article-listing",
+  "minRows": 3,
+  "requiredFields": [
+    { "name": "title", "type": "title", "confidenceAtLeast": 0.55 },
+    { "name": "url", "type": "url", "confidenceAtLeast": 0.55 },
+    { "name": "summary", "type": "text", "confidenceAtLeast": 0.4 }
+  ],
+  "requiredAnomalies": ["navigation_ignored"]
+}

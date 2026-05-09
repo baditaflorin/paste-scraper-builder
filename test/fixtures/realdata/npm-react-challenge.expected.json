@@ -1,0 +1,10 @@
+{
+  "id": "npm-react-challenge",
+  "sourceUrl": "https://www.npmjs.com/package/react",
+  "expectedKind": "actionable_error",
+  "expectedShape": "challenge-page",
+  "minRows": 0,
+  "requiredFields": [],
+  "requiredAnomalies": ["challenge_page"],
+  "requiredMessageIncludes": ["not the target content", "paste the fully rendered target page"]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "hacker-news",
+  "sourceUrl": "https://news.ycombinator.com/",
+  "expectedKind": "records",
+  "expectedShape": "sibling-news-listing",
+  "minRows": 20,
+  "requiredFields": [
+    { "name": "title", "type": "title", "confidenceAtLeast": 0.7 },
+    { "name": "url", "type": "url", "confidenceAtLeast": 0.7 },
+    { "name": "score", "type": "count", "confidenceAtLeast": 0.55 },
+    { "name": "author", "type": "author", "confidenceAtLeast": 0.55 },
+    { "name": "age", "type": "date", "confidenceAtLeast": 0.45 },
+    { "name": "comments", "type": "count", "confidenceAtLeast": 0.45 }
+  ],
+  "requiredAnomalies": ["sibling_record"]
+}
