@@ -374,41 +374,50 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
   }
 }
 
+// Returns true when el has ≥2 other siblings that share the same tag (and first class, if any).
+// This identifies LIST ITEMS (li, article, tr, div.card repeated 3+ times in a parent)
+// and avoids CONTAINERS (ul, div.wrapper) which have diverse or no same-type siblings.
+const hasSimilarSiblings = (el: Element): boolean => {
+  const parent = el.parentElement
+  if (!parent) return false
+  const tag = el.tagName
+  const firstClass = Array.from(el.classList).find((c) => !ignoredClasses.has(c)) ?? ''
+  const similar = Array.from(parent.children).filter(
+    (s) =>
+      s !== el &&
+      s.tagName === tag &&
+      (firstClass === '' || s.classList.contains(firstClass)),
+  )
+  return similar.length >= 2 // ≥3 total items (self + 2 siblings)
+}
+
 const bestRowElement = (element: Element, document: Document): Element => {
-  // Walk upward from the clicked element. Return the first (most specific / deepest)
-  // ancestor that:
-  //   - has ≥2 direct element children (is a card, not a bare link or span)
-  //   - has a CSS selector that matches 2–100 elements (repeated but not a generic class)
-  //
-  // Capping at 100 prevents broad utility classes (.d-flex, .col-12) from winning over
-  // the actual repeating item (li.repo-card, article, etc.).
   let current: Element | null = element
 
+  // Pass 1 — sibling-based: find the shallowest (most specific) element that:
+  //   a) has ≥2 direct element children (is a card, not a bare span/link)
+  //   b) has ≥2 same-type siblings (it is an ITEM in a list, not a CONTAINER of items)
   while (current && current !== document.body && current !== document.documentElement) {
-    const childCount = directElementChildren(current).length
-    if (childCount >= 2) {
+    if (directElementChildren(current).length >= 2 && hasSimilarSiblings(current)) {
+      return current
+    }
+    current = current.parentElement
+  }
+
+  // Pass 2 — selector-based fallback: first ancestor whose selector matches 2–50 elements
+  current = element
+  while (current && current !== document.body && current !== document.documentElement) {
+    if (directElementChildren(current).length >= 2) {
       const css = inferRowCssSelector(current, document)
       const matches = selectElements(document, css, 'css')
-      if (matches.length >= 2 && matches.length <= 100 && hasElement(matches, current)) {
+      if (matches.length >= 2 && matches.length <= 50 && hasElement(matches, current)) {
         return current
       }
     }
     current = current.parentElement
   }
 
-  // Fallback: original scoring (handles edge cases like single-item pages)
-  const candidates: Array<{ element: Element; score: number }> = []
-  current = element
-  while (current && current !== document.body && current !== document.documentElement) {
-    const css = inferRowCssSelector(current, document)
-    const matches = selectElements(document, css, 'css')
-    const childWeight = directElementChildren(current).length * 4
-    const repeatedWeight = matches.length > 1 && hasElement(matches, current) ? 100 : 0
-    const siblingWeight = current.parentElement && directElementChildren(current.parentElement).length > 1 ? 12 : 0
-    candidates.push({ element: current, score: repeatedWeight + childWeight + siblingWeight })
-    current = current.parentElement
-  }
-  return candidates.sort((left, right) => right.score - left.score)[0]?.element ?? element
+  return element
 }
 
 export const selectorsForRowPick = (element: Element, document: Document): PickedSelector => {

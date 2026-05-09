@@ -124,11 +124,24 @@ export function PickerFrame({
 
       const picked = selectorsForFieldPick(element, rowSelector, rowSelectorMode, document)
       if (!picked) {
-        // Clicked outside current rows — offer to re-detect row from this element
+        // Clicked outside current rows — re-detect row from this element
         const newRow = selectorsForRowPick(element, document)
         onPickRow(newRow)
         const count = selectorMatches(html, newRow[rowSelectorMode], rowSelectorMode)
-        onMessage(`Switched row to clicked element (${count} items). Fields re-inferred.`)
+        onMessage(`Row switched to clicked element (${count} items). Fields re-inferred.`)
+        return
+      }
+
+      // Reject positional selectors — they only work for one specific row
+      const fieldSel = picked[rowSelectorMode]
+      if (fieldSel.includes(':nth-of-type') || fieldSel.includes(':nth-child')) {
+        // Re-detect: the row selector is too broad — the clicked element IS the row
+        const newRow = selectorsForRowPick(element, document)
+        onPickRow(newRow)
+        const count = selectorMatches(html, newRow[rowSelectorMode], rowSelectorMode)
+        onMessage(
+          `Row re-detected from clicked element (${count} items). Fields re-inferred — add more with Field mode.`,
+        )
         return
       }
 

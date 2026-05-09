@@ -485,6 +485,12 @@ select {
   color: var(--text);
 }
 
+.tip-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
 .tip-button {
   flex-shrink: 0;
   padding: 4px 10px;
@@ -500,6 +506,16 @@ select {
 
 .tip-button:hover {
   background: #fde68a;
+}
+
+.tip-button--reset {
+  color: #7c3aed;
+  background: #ede9fe;
+  border-color: #c4b5fd;
+}
+
+.tip-button--reset:hover {
+  background: #ddd6fe;
 }
 
 .empty-state,

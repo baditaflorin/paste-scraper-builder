@@ -751,16 +751,69 @@ const knownStrategies = (
 
 const repeatedSelectorCandidates = ['article', 'main li', 'section li', 'tbody tr', '.card', '.item', '.result']
 
+// Scan the actual DOM for the most-repeated structural pattern — finds tag.class
+// combos that appear as direct siblings in the same parent, with meaningful content.
+// This catches real-world listing pages (GitHub repos, product grids, etc.) without
+// relying on the 7 hardcoded class guesses.
+const scanForRepeatedSiblings = (document: Document): { selector: string; count: number } | null => {
+  const skipTags = new Set([
+    'script',
+    'style',
+    'head',
+    'html',
+    'body',
+    'br',
+    'hr',
+    'meta',
+    'link',
+    'noscript',
+    'path',
+    'svg',
+  ])
+  let best: { selector: string; count: number } | null = null
+
+  document.querySelectorAll('*').forEach((parent) => {
+    if (skipTags.has(parent.tagName.toLowerCase())) return
+
+    // Tally direct children by (tag + first meaningful class)
+    const groups = new Map<string, number>()
+    Array.from(parent.children).forEach((child) => {
+      const tag = child.tagName.toLowerCase()
+      if (skipTags.has(tag)) return
+      // Must have at least 1 element child (not just a text leaf)
+      if (!child.firstElementChild) return
+      const firstClass = Array.from(child.classList).find((c) => !/^(d-|flex|col-|row|mt|mb|ml|mr|pt|pb|pl|pr|gap|p-|m-)/.test(c)) ?? ''
+      const key = firstClass ? `${tag}.${firstClass}` : tag
+      groups.set(key, (groups.get(key) ?? 0) + 1)
+    })
+
+    groups.forEach((n, key) => {
+      if (n >= 3 && (!best || n > best.count)) {
+        best = { selector: key, count: n }
+      }
+    })
+  })
+
+  return best
+}
+
 const genericStrategy = (
   normalizedHtml: string,
   document: Document,
   startedAt: number,
   sourceUrl?: string,
 ): InferenceResult => {
-  const candidate = repeatedSelectorCandidates
+  // DOM-scan first (finds actual repeated siblings in the real page structure),
+  // then fall back to the hardcoded candidate list.
+  const scanned = scanForRepeatedSiblings(document)
+  const hardcoded = repeatedSelectorCandidates
     .map((selector) => ({ selector, count: count(document, selector) }))
     .filter((entry) => entry.count >= 2)
     .sort((left, right) => right.count - left.count)[0]
+
+  // Prefer scanned if it found more items; prefer hardcoded only if scanned found nothing
+  const candidate: { selector: string; count: number } | undefined =
+    scanned && (!hardcoded || scanned.count >= hardcoded.count) ? scanned : hardcoded
 
   if (!candidate) {
     const fields = [

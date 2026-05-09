@@ -223,13 +223,15 @@ export function ScraperBuilder() {
         ...current,
         rowSelector: rowSel,
         rowSelectorMode: selectorMode,
-        fields: autoFields.length > 0 ? autoFields : current.fields,
+        // Always replace fields when row changes — old positional fields are stale
+        fields: autoFields,
+        rowExclusions: [],
       }
     })
-    if (project.fields.length === 0) {
-      setToast('Row picked — fields auto-detected. Remove false positives with ×.')
-    }
     setPickMode('field')
+    setToast(
+      'Row detected — fields auto-inferred. Click fields in the Picker to add more, or × to remove false positives.',
+    )
   }
 
   const handlePickField = (picked: PickedFieldSelector) => {
@@ -721,23 +723,35 @@ export function ScraperBuilder() {
             )}
           </div>
 
-          {(inference.status === 'low_confidence' || inference.status === 'partial') && !manualOverride && (
+          {(inference.status === 'low_confidence' ||
+            inference.status === 'partial' ||
+            (project.fields.length > 0 &&
+              project.fields.every((f) => f.selector.includes(':nth-of-type')))) && (
             <div className="action-tip" role="status">
               <span>
-                {inference.status === 'low_confidence'
-                  ? 'Uncertain pattern — click any item in the Picker to auto-detect rows and fields.'
-                  : 'Partial match — click one item in the Picker to refine.'}
+                {project.fields.length > 0 && project.fields.every((f) => f.selector.includes(':nth-of-type'))
+                  ? 'Fields are position-locked — they only work for specific rows. Click one item in the Picker to re-detect.'
+                  : 'Pattern uncertain — click any repeating item in the Picker to auto-detect rows and fields.'}
               </span>
-              <button
-                type="button"
-                className="tip-button"
-                onClick={() => {
-                  setPickMode('row')
-                  setToast('Click any repeating item in the Picker panel.')
-                }}
-              >
-                → Open Picker
-              </button>
+              <div className="tip-actions">
+                <button
+                  type="button"
+                  className="tip-button"
+                  onClick={() => {
+                    setPickMode('row')
+                    setToast('Click any repeating item (e.g. one product, one repo) in the Picker.')
+                  }}
+                >
+                  → Pick a row
+                </button>
+                <button
+                  type="button"
+                  className="tip-button tip-button--reset"
+                  onClick={() => void resetProject()}
+                >
+                  ↺ Reset
+                </button>
+              </div>
             </div>
           )}
 
