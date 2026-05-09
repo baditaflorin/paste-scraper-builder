@@ -191,3 +191,9 @@ Manual work the app should have done: Identify partial input, separate complete 
 4. No cloud sync, accounts, shared projects, or multi-project library.
 5. No architecture escalation beyond Mode A.
 6. No fixture-free "smart" claims; substance work must be tied to the 10 real-data inputs.
+
+## After Phase 2 Implementation
+
+The fixture suite now covers all 10 real inputs. Nine produce record previews without manual selector picking. The npm challenge page intentionally produces an actionable error, because extracting challenge markup would be silent wrongness.
+
+Pass rate against the Phase 2 success metric: 10/10 handled, 9/10 with records, 1/10 with graceful no-record failure. Determinism checks pass for all 10 fixtures.

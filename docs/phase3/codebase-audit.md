@@ -30,3 +30,14 @@
 1. Playwright smoke covers sample inference and export tabs, but not file upload or share-link import.
 2. IndexedDB migration is schema-validated but lacks a focused unit test.
 3. Generated Python/Go code is string-tested, not executed against fixtures.
+
+## Measurements After Phase 3 Health Work
+
+| Metric                             |    Result | Notes                                                                                      |
+| ---------------------------------- | --------: | ------------------------------------------------------------------------------------------ |
+| Project state codec tests          |         2 | Hash and JSON round-trip are covered.                                                      |
+| `ScraperBuilder.tsx` state helpers | extracted | State JSON, hash import/export, settings, and confidence labels live in `projectState.ts`. |
+| TODO / FIXME / XXX / HACK          |         0 | Unchanged.                                                                                 |
+| `any` / `ts-ignore`                |     0 / 0 | Unchanged.                                                                                 |
+
+Remaining accepted debt: `ScraperBuilder.tsx`, `inference.ts`, and `selectorEngine.ts` still exceed 300 lines. They are tested and documented as Phase 4 split candidates.

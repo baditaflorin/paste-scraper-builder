@@ -1,4 +1,4 @@
-const CACHE_NAME = 'paste-scraper-builder-v0.1.0'
+const CACHE_NAME = 'paste-scraper-builder-v0.3.0'
 const BASE = '/paste-scraper-builder/'
 
 self.addEventListener('install', (event) => {

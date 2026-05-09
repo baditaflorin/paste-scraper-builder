@@ -1,8 +1,8 @@
 {
   "name": "paste-scraper-builder",
   "private": true,
-  "version": "0.1.0",
-  "releaseDate": "2026-05-08T00:00:00.000Z",
+  "version": "0.3.0",
+  "releaseDate": "2026-05-09T00:00:00.000Z",
   "description": "Build scrapers by pasting rendered HTML, picking selectors visually, and exporting CSV or code.",
   "type": "module",
   "scripts": {
