@@ -26,13 +26,23 @@ import { generateGoScraper, generatePythonScraper } from './codegen'
 import { rowsToCsv, rowsToPlainCsv } from './csv'
 import { analyzeHtml, stableId } from './inference'
 import { PickerFrame } from './PickerFrame'
+import {
+  confidenceLabel,
+  decodeProjectJson,
+  encodeProjectState,
+  hashPrefix,
+  loadSettings,
+  projectFromLocationHash,
+  projectStateJson,
+  saveSettings,
+  type AppSettings,
+} from './projectState'
 import { sampleHtml } from './sampleHtml'
 import { extractPreview } from './selectorEngine'
 import { clearDraft, loadDraft, saveDraft } from './storage'
 import {
   blankProject,
   extractionAttributeSchema,
-  scraperProjectSchema,
   selectorModeSchema,
   type ExtractionAttribute,
   type FieldRule,
@@ -46,20 +56,8 @@ import {
 type PickMode = 'row' | 'field'
 type ExportTab = 'csv' | 'json' | 'python' | 'go'
 
-interface AppSettings {
-  autoInfer: boolean
-  includeProvenance: boolean
-}
-
 const attributeOptions = extractionAttributeSchema.options
 const selectorModes = selectorModeSchema.options
-const settingsKey = 'paste-scraper-builder-settings-v1'
-const hashPrefix = '#state='
-
-const defaultSettings: AppSettings = {
-  autoInfer: true,
-  includeProvenance: true,
-}
 
 const uniqueFieldName = (fields: FieldRule[], preferredName: string): string => {
   const normalized = preferredName
@@ -85,55 +83,6 @@ const updateTimestamp = (project: ScraperProject): ScraperProject => ({
   updatedAt: new Date().toISOString(),
 })
 
-const loadSettings = (): AppSettings => {
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(settingsKey) ?? '{}') as Partial<AppSettings>
-    return { ...defaultSettings, ...parsed }
-  } catch {
-    return defaultSettings
-  }
-}
-
-const encodeState = (project: ScraperProject): string => {
-  const bytes = new TextEncoder().encode(JSON.stringify(project))
-  let binary = ''
-  bytes.forEach((byte) => {
-    binary += String.fromCharCode(byte)
-  })
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '')
-}
-
-const decodeState = (state: string): ScraperProject | null => {
-  try {
-    const padded = state
-      .replace(/-/g, '+')
-      .replace(/_/g, '/')
-      .padEnd(Math.ceil(state.length / 4) * 4, '=')
-    const binary = atob(padded)
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
-    const parsed = JSON.parse(new TextDecoder().decode(bytes))
-    const result = scraperProjectSchema.safeParse(parsed)
-    return result.success ? result.data : null
-  } catch {
-    return null
-  }
-}
-
-const projectStateJson = (project: ScraperProject): string => `${JSON.stringify(project, null, 2)}\n`
-
-const confidenceLabel = (confidence = 0): string => {
-  if (confidence >= 0.75) {
-    return 'high'
-  }
-  if (confidence >= 0.5) {
-    return 'medium'
-  }
-  if (confidence > 0) {
-    return 'low'
-  }
-  return 'none'
-}
-
 const projectMatchesInference = (project: ScraperProject, inference: InferenceResult): boolean =>
   project.rowSelector === inference.project.rowSelector &&
   project.inferredShape === inference.project.inferredShape &&
@@ -141,10 +90,7 @@ const projectMatchesInference = (project: ScraperProject, inference: InferenceRe
   JSON.stringify(project.fields) === JSON.stringify(inference.project.fields) &&
   JSON.stringify(project.anomalies ?? []) === JSON.stringify(inference.project.anomalies ?? [])
 
-const initialSharedProject =
-  typeof window === 'undefined' || !window.location.hash.startsWith(hashPrefix)
-    ? null
-    : decodeState(window.location.hash.slice(hashPrefix.length))
+const initialSharedProject = projectFromLocationHash()
 
 const downloadText = (filename: string, contents: string, mimeType: string) => {
   const blob = new Blob([contents], { type: mimeType })
@@ -206,7 +152,7 @@ export function ScraperBuilder() {
   }, [])
 
   useEffect(() => {
-    window.localStorage.setItem(settingsKey, JSON.stringify(settings))
+    saveSettings(settings)
   }, [settings])
 
   useEffect(() => {
@@ -349,10 +295,10 @@ export function ScraperBuilder() {
   }
 
   const importText = (text: string, label: string) => {
-    const parsed = scraperProjectSchema.safeParse(JSON.parse(text))
-    if (parsed.success) {
-      setProject(updateTimestamp(parsed.data))
-      setSelectorMode(parsed.data.rowSelectorMode)
+    const parsed = decodeProjectJson(text)
+    if (parsed) {
+      setProject(updateTimestamp(parsed))
+      setSelectorMode(parsed.rowSelectorMode)
       setManualOverride(true)
       setToast(`${label} project restored.`)
       return
@@ -390,7 +336,7 @@ export function ScraperBuilder() {
   }
 
   const shareProject = async () => {
-    const encoded = encodeState(project)
+    const encoded = encodeProjectState(project)
     if (encoded.length > 60_000) {
       setToast('Project is too large for a share URL. Download the JSON state file instead.')
       return
