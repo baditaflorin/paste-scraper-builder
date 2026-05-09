@@ -472,6 +472,36 @@ select {
   line-height: 1.35;
 }
 
+.action-tip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid #fcd34d;
+  border-radius: 7px;
+  background: var(--amber-soft);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.tip-button {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #92400e;
+  background: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 5px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tip-button:hover {
+  background: #fde68a;
+}
+
 .empty-state,
 .warnings {
   border: 1px dashed var(--border-strong);

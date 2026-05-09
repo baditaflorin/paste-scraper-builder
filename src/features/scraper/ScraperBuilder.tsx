@@ -721,6 +721,26 @@ export function ScraperBuilder() {
             )}
           </div>
 
+          {(inference.status === 'low_confidence' || inference.status === 'partial') && !manualOverride && (
+            <div className="action-tip" role="status">
+              <span>
+                {inference.status === 'low_confidence'
+                  ? 'Uncertain pattern — click any item in the Picker to auto-detect rows and fields.'
+                  : 'Partial match — click one item in the Picker to refine.'}
+              </span>
+              <button
+                type="button"
+                className="tip-button"
+                onClick={() => {
+                  setPickMode('row')
+                  setToast('Click any repeating item in the Picker panel.')
+                }}
+              >
+                → Open Picker
+              </button>
+            </div>
+          )}
+
           {visibleMessages.length > 0 && (
             <div className="warnings" role="status">
               {visibleMessages.slice(0, 4).map((warning) => (

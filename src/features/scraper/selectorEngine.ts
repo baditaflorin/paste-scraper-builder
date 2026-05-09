@@ -375,9 +375,30 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
 }
 
 const bestRowElement = (element: Element, document: Document): Element => {
-  const candidates: Array<{ element: Element; score: number }> = []
+  // Walk upward from the clicked element. Return the first (most specific / deepest)
+  // ancestor that:
+  //   - has ≥2 direct element children (is a card, not a bare link or span)
+  //   - has a CSS selector that matches 2–100 elements (repeated but not a generic class)
+  //
+  // Capping at 100 prevents broad utility classes (.d-flex, .col-12) from winning over
+  // the actual repeating item (li.repo-card, article, etc.).
   let current: Element | null = element
 
+  while (current && current !== document.body && current !== document.documentElement) {
+    const childCount = directElementChildren(current).length
+    if (childCount >= 2) {
+      const css = inferRowCssSelector(current, document)
+      const matches = selectElements(document, css, 'css')
+      if (matches.length >= 2 && matches.length <= 100 && hasElement(matches, current)) {
+        return current
+      }
+    }
+    current = current.parentElement
+  }
+
+  // Fallback: original scoring (handles edge cases like single-item pages)
+  const candidates: Array<{ element: Element; score: number }> = []
+  current = element
   while (current && current !== document.body && current !== document.documentElement) {
     const css = inferRowCssSelector(current, document)
     const matches = selectElements(document, css, 'css')
@@ -387,7 +408,6 @@ const bestRowElement = (element: Element, document: Document): Element => {
     candidates.push({ element: current, score: repeatedWeight + childWeight + siblingWeight })
     current = current.parentElement
   }
-
   return candidates.sort((left, right) => right.score - left.score)[0]?.element ?? element
 }
 
@@ -467,6 +487,43 @@ const guessFieldMeta = (tag: string, attribute: ExtractionAttribute, samples: st
   return { fieldType: 'text', baseName: 'text', attribute: 'text' }
 }
 
+// Build a portable class/attribute-based relative selector from root to el.
+// Avoids nth-of-type paths which are position-locked and break across rows.
+const portableRelativeSelector = (root: Element, el: Element): string | null => {
+  const tag = el.tagName.toLowerCase()
+  const classes = Array.from(el.classList).filter((c) => !ignoredClasses.has(c))
+
+  // 1. Class-based selectors — most portable
+  for (const cls of classes.slice(0, 4)) {
+    for (const sel of [`.${cssEscape(cls)}`, `${tag}.${cssEscape(cls)}`]) {
+      if (queryAll(root, sel).length === 1) return sel
+    }
+  }
+
+  // 2. Semantic attributes
+  for (const attr of ['itemprop', 'aria-label', 'data-testid', 'name', 'rel']) {
+    const val = el.getAttribute(attr)
+    if (!val) continue
+    const sel = `${tag}[${attr}="${quoteCss(val)}"]`
+    if (queryAll(root, sel).length === 1) return sel
+  }
+
+  // 3. Parent class + tag (one level up)
+  const parent = el.parentElement
+  if (parent && parent !== root) {
+    const pClasses = Array.from(parent.classList).filter((c) => !ignoredClasses.has(c))
+    for (const pcls of pClasses.slice(0, 3)) {
+      for (const sel of [`.${cssEscape(pcls)} ${tag}`, `.${cssEscape(pcls)} > ${tag}`]) {
+        if (queryAll(root, sel).length === 1) return sel
+      }
+    }
+  }
+
+  // 4. Fall back to selectorPath but reject nth-of-type results (they're position-locked)
+  const path = selectorPath(root, el)
+  return path.includes(':nth-of-type') ? null : path
+}
+
 export const inferFieldsFromRowSelector = (
   rowSelector: string,
   rowMode: SelectorMode,
@@ -488,18 +545,21 @@ export const inferFieldsFromRowSelector = (
   const candidates: Candidate[] = []
   const seenKeys = new Set<string>()
 
-  // Walk descendants of first row and test each relative selector across sample rows
-  const descendants = Array.from(firstRow.querySelectorAll('*')).slice(0, 150)
+  // Walk descendants of first row — build portable relative selectors and test coverage
+  const descendants = Array.from(firstRow.querySelectorAll('*')).slice(0, 200)
 
   for (const el of descendants) {
     const tag = el.tagName.toLowerCase()
-    if (['script', 'style', 'nav', 'header', 'footer', 'noscript'].includes(tag)) continue
+    if (['script', 'style', 'nav', 'header', 'footer', 'noscript', 'button'].includes(tag)) continue
 
     const isImg = tag === 'img'
     const isLink = tag === 'a'
     const attribute: ExtractionAttribute = isImg ? 'src' : isLink ? 'href' : 'text'
 
-    const relSel = selectorPath(firstRow, el)
+    // Use portable class-based selector — skip if only nth-of-type path available
+    const relSel = portableRelativeSelector(firstRow, el)
+    if (!relSel) continue
+
     const key = `${relSel}|${attribute}`
     if (seenKeys.has(key)) continue
     seenKeys.add(key)

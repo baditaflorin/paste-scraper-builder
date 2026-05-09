@@ -112,14 +112,23 @@ export function PickerFrame({
         return
       }
 
+      // Field mode with no row set: auto-detect the row from the clicked element,
+      // then trigger full row pick (which also auto-infers fields).
       if (!rowSelector) {
-        onMessage('Pick a row before adding fields.')
+        const picked = selectorsForRowPick(element, document)
+        onPickRow(picked)
+        const count = selectorMatches(html, picked[rowSelectorMode], rowSelectorMode)
+        onMessage(`Row auto-detected (${count} items). Fields inferred — refine with Field mode.`)
         return
       }
 
       const picked = selectorsForFieldPick(element, rowSelector, rowSelectorMode, document)
       if (!picked) {
-        onMessage('Clicked element is outside the current row selector.')
+        // Clicked outside current rows — offer to re-detect row from this element
+        const newRow = selectorsForRowPick(element, document)
+        onPickRow(newRow)
+        const count = selectorMatches(html, newRow[rowSelectorMode], rowSelectorMode)
+        onMessage(`Switched row to clicked element (${count} items). Fields re-inferred.`)
         return
       }
 
