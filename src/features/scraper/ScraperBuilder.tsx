@@ -38,8 +38,9 @@ import {
   type AppSettings,
 } from './projectState'
 import { sampleHtml } from './sampleHtml'
-import { extractPreview } from './selectorEngine'
+import { extractPreview, inferFieldsFromRowSelector } from './selectorEngine'
 import { clearDraft, loadDraft, saveDraft } from './storage'
+import { parseHtml } from './dom'
 import {
   blankProject,
   extractionAttributeSchema,
@@ -213,12 +214,21 @@ export function ScraperBuilder() {
   }
 
   const handlePickRow = (picked: PickedSelector) => {
+    const rowSel = picked[selectorMode]
     setManualOverride(true)
-    setProjectWithTimestamp((current) => ({
-      ...current,
-      rowSelector: picked[selectorMode],
-      rowSelectorMode: selectorMode,
-    }))
+    setProjectWithTimestamp((current) => {
+      const doc = parseHtml(current.html)
+      const autoFields = inferFieldsFromRowSelector(rowSel, selectorMode, doc)
+      return {
+        ...current,
+        rowSelector: rowSel,
+        rowSelectorMode: selectorMode,
+        fields: autoFields.length > 0 ? autoFields : current.fields,
+      }
+    })
+    if (project.fields.length === 0) {
+      setToast('Row picked — fields auto-detected. Remove false positives with ×.')
+    }
     setPickMode('field')
   }
 
@@ -483,6 +493,25 @@ export function ScraperBuilder() {
             <span>
               {confidenceLabel(inference.confidence)} confidence · {preview.rowCount} rows · {inference.strategy}
             </span>
+            {inference.nextPageUrl && (
+              <span className="next-page-hint">
+                Next page:{' '}
+                <code title={inference.nextPageUrl}>
+                  {inference.nextPageUrl.length > 60
+                    ? `${inference.nextPageUrl.slice(0, 60)}…`
+                    : inference.nextPageUrl}
+                </code>
+                <button
+                  type="button"
+                  className="icon-button"
+                  title="Copy next-page URL"
+                  aria-label="Copy next-page URL"
+                  onClick={() => void copyText(inference.nextPageUrl!, 'Next-page URL')}
+                >
+                  <Clipboard size={13} aria-hidden="true" />
+                </button>
+              </span>
+            )}
           </div>
 
           <details className="settings-panel">
@@ -704,19 +733,40 @@ export function ScraperBuilder() {
             <table>
               <thead>
                 <tr>
+                  <th aria-label="Exclude row" />
                   {project.fields.map((field) => (
                     <th key={field.id}>{field.name}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {preview.rows.slice(0, 25).map((row, rowIndex) => (
-                  <tr key={`${rowIndex}-${JSON.stringify(row)}`}>
-                    {project.fields.map((field) => (
-                      <td key={field.id}>{row[field.name]}</td>
-                    ))}
-                  </tr>
-                ))}
+                {preview.rows.slice(0, 25).map((row, displayIndex) => {
+                  const domIndex = preview.rowIndices[displayIndex]
+                  return (
+                    <tr key={`${domIndex}-${JSON.stringify(row)}`}>
+                      <td>
+                        <button
+                          type="button"
+                          className="exclude-row-button"
+                          title="Exclude this row (false positive)"
+                          aria-label="Exclude row"
+                          onClick={() => {
+                            setManualOverride(true)
+                            setProjectWithTimestamp((current) => ({
+                              ...current,
+                              rowExclusions: [...(current.rowExclusions ?? []), domIndex],
+                            }))
+                          }}
+                        >
+                          ×
+                        </button>
+                      </td>
+                      {project.fields.map((field) => (
+                        <td key={field.id}>{row[field.name]}</td>
+                      ))}
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>

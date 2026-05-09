@@ -845,6 +845,44 @@ const genericStrategy = (
   )
 }
 
+const detectNextPageUrl = (document: Document): string | undefined => {
+  // rel="next" is the most reliable signal
+  const relNext = document.querySelector<HTMLAnchorElement | HTMLLinkElement>('a[rel="next"], link[rel="next"]')
+  if (relNext) {
+    const href = relNext.getAttribute('href')
+    if (href && !href.startsWith('#')) return href
+  }
+
+  // aria-label next variations
+  const ariaNext = document.querySelector<HTMLAnchorElement>(
+    '[aria-label="Next page"], [aria-label="Next"], [aria-label="next page"]',
+  )
+  if (ariaNext instanceof HTMLAnchorElement) {
+    const href = ariaNext.getAttribute('href')
+    if (href && !href.startsWith('#')) return href
+  }
+
+  // Text-content matching
+  const nextPattern = /^\s*(next|next\s*page|›|»|→|older|more\s*results?)\s*$/i
+  for (const link of Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))) {
+    if (nextPattern.test(link.textContent ?? '')) {
+      const href = link.getAttribute('href')
+      if (href && !href.startsWith('#')) return href
+    }
+  }
+
+  // Common pagination container selectors
+  const paginationNext = document.querySelector<HTMLAnchorElement>(
+    '.pagination .next a, .pager .next a, .next-page a, [class*="pagination"] a:last-of-type',
+  )
+  if (paginationNext) {
+    const href = paginationNext.getAttribute('href')
+    if (href && !href.startsWith('#')) return href
+  }
+
+  return undefined
+}
+
 export const analyzeHtml = (html: string, options: { sourceUrl?: string } = {}): InferenceResult => {
   const startedAt = performance.now()
   const normalizedHtml = normalizeInputHtml(html)
@@ -900,8 +938,9 @@ export const analyzeHtml = (html: string, options: { sourceUrl?: string } = {}):
   }
 
   const document = parseHtml(normalizedHtml)
-  return (
+  const result =
     knownStrategies(normalizedHtml, document, startedAt, options.sourceUrl) ??
     genericStrategy(normalizedHtml, document, startedAt, options.sourceUrl)
-  )
+  const nextPageUrl = detectNextPageUrl(document)
+  return nextPageUrl ? { ...result, nextPageUrl } : result
 }

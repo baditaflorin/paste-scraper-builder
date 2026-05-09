@@ -72,6 +72,7 @@ export const scraperProjectSchema = z.object({
   inferredShape: z.string().optional(),
   inferenceConfidence: z.number().min(0).max(1).optional(),
   anomalies: z.array(z.string()).optional(),
+  rowExclusions: z.array(z.number()).optional(),
 })
 
 export type ScraperProject = z.infer<typeof scraperProjectSchema>
@@ -101,6 +102,7 @@ export interface InferenceResult {
   timingMs: number
   sourceUrl?: string
   schemaVersion: string
+  nextPageUrl?: string
 }
 
 export interface PreviewResult {
@@ -108,6 +110,7 @@ export interface PreviewResult {
   rowCount: number
   warnings: string[]
   fieldMatchCounts?: Record<string, number>
+  rowIndices: number[]
 }
 
 export interface PickedSelector {
@@ -127,4 +130,5 @@ export const blankProject = (): ScraperProject => ({
   fields: [],
   updatedAt: new Date().toISOString(),
   anomalies: [],
+  rowExclusions: [],
 })

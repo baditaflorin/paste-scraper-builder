@@ -1,6 +1,8 @@
 import type {
   ExtractionAttribute,
   FieldRule,
+  FieldType,
+  FieldNormalizer,
   PickedFieldSelector,
   PickedSelector,
   PreviewResult,
@@ -9,6 +11,16 @@ import type {
 } from './types'
 import { normalizeText, parseHtml, sanitizeHtml } from './dom'
 import { normalizeValue } from './normalization'
+
+const psbHash = (value: string): string => {
+  let result = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    result ^= value.charCodeAt(index)
+    result = Math.imul(result, 16777619)
+  }
+  return (result >>> 0).toString(36)
+}
+const psbStableId = (...parts: string[]): string => `psb_${psbHash(parts.join(''))}`
 
 const ignoredClasses = new Set(['psb-hover', 'psb-row', 'psb-field'])
 const preferredAttributes = ['data-testid', 'data-test', 'data-qa', 'data-sku', 'itemprop', 'name', 'aria-label']
@@ -315,7 +327,7 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
       : []
 
   if (!project.html.trim()) {
-    return { rows: [], rowCount: 0, warnings: ['Paste HTML or load the sample.'] }
+    return { rows: [], rowCount: 0, warnings: ['Paste HTML or load the sample.'], rowIndices: [] }
   }
 
   if (!project.rowSelector.trim()) {
@@ -330,13 +342,20 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
     warnings.push('Add at least one field selector.')
   }
 
-  const previewRows = rows
-    .map((row) =>
-      Object.fromEntries(
-        project.fields.map((field) => [field.name, fieldValue(document, row, field, project.sourceUrl)]),
-      ),
-    )
-    .filter((row) => project.fields.length === 0 || Object.values(row).some((value) => value.trim()))
+  const exclusions = new Set(project.rowExclusions ?? [])
+  const indexedRows = rows.map((row, idx) => ({
+    row,
+    idx,
+    data: Object.fromEntries(
+      project.fields.map((field) => [field.name, fieldValue(document, row, field, project.sourceUrl)]),
+    ),
+  }))
+
+  const previewIndexed = indexedRows.filter(
+    ({ idx, data }) =>
+      !exclusions.has(idx) &&
+      (project.fields.length === 0 || Object.values(data).some((value) => value.trim())),
+  )
 
   project.fields.forEach((field) => {
     const matchedCount = rows.filter((row) => fieldElements(document, row, field).length > 0).length
@@ -347,10 +366,11 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
   })
 
   return {
-    rows: previewRows,
-    rowCount: previewRows.length,
+    rows: previewIndexed.map((r) => r.data),
+    rowCount: previewIndexed.length,
     warnings,
     fieldMatchCounts,
+    rowIndices: previewIndexed.map((r) => r.idx),
   }
 }
 
@@ -415,4 +435,131 @@ export const selectorMatches = (
     (count, row) => count + selectElements(row, selector, selectorMode).length,
     0,
   )
+}
+
+type FieldMeta = {
+  fieldType: FieldType
+  baseName: string
+  attribute: ExtractionAttribute
+  normalizer?: FieldNormalizer
+}
+
+const guessFieldMeta = (tag: string, attribute: ExtractionAttribute, samples: string[]): FieldMeta => {
+  const joined = samples.join(' ').toLowerCase()
+  if (attribute === 'src' || tag === 'img') {
+    return { fieldType: 'image', baseName: 'image', attribute: 'src', normalizer: 'image' }
+  }
+  if (attribute === 'href') {
+    return { fieldType: 'url', baseName: 'url', attribute: 'href', normalizer: 'url' }
+  }
+  if (/\$|€|£|¥|\d+[.,]\d{2}|price|cost/.test(joined)) {
+    return { fieldType: 'price', baseName: 'price', attribute: 'text', normalizer: 'price' }
+  }
+  if (/\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b|\d{4}-\d{2}-\d{2}/.test(joined)) {
+    return { fieldType: 'date', baseName: 'date', attribute: 'text', normalizer: 'date' }
+  }
+  if (/^\d[\d,\s]*$/.test(samples[0] ?? '')) {
+    return { fieldType: 'count', baseName: 'count', attribute: 'text', normalizer: 'count' }
+  }
+  if (/h[1-4]/.test(tag)) {
+    return { fieldType: 'title', baseName: 'title', attribute: 'text' }
+  }
+  return { fieldType: 'text', baseName: 'text', attribute: 'text' }
+}
+
+export const inferFieldsFromRowSelector = (
+  rowSelector: string,
+  rowMode: SelectorMode,
+  document: Document,
+): FieldRule[] => {
+  const rows = selectElements(document, rowSelector, rowMode)
+  if (rows.length === 0) return []
+
+  const sampleRows = rows.slice(0, Math.min(6, rows.length))
+  const firstRow = sampleRows[0]
+
+  type Candidate = {
+    selector: string
+    meta: FieldMeta
+    coverage: number
+    samples: string[]
+  }
+
+  const candidates: Candidate[] = []
+  const seenKeys = new Set<string>()
+
+  // Walk descendants of first row and test each relative selector across sample rows
+  const descendants = Array.from(firstRow.querySelectorAll('*')).slice(0, 150)
+
+  for (const el of descendants) {
+    const tag = el.tagName.toLowerCase()
+    if (['script', 'style', 'nav', 'header', 'footer', 'noscript'].includes(tag)) continue
+
+    const isImg = tag === 'img'
+    const isLink = tag === 'a'
+    const attribute: ExtractionAttribute = isImg ? 'src' : isLink ? 'href' : 'text'
+
+    const relSel = selectorPath(firstRow, el)
+    const key = `${relSel}|${attribute}`
+    if (seenKeys.has(key)) continue
+    seenKeys.add(key)
+
+    let matchCount = 0
+    const samples: string[] = []
+
+    for (const row of sampleRows) {
+      const matched = queryAll(row, relSel)
+      if (matched.length !== 1) continue
+      const val =
+        attribute === 'text'
+          ? normalizeText(matched[0].textContent)
+          : (matched[0].getAttribute(attribute) ?? '')
+      if (!val.trim()) continue
+      matchCount++
+      if (samples.length < 3) samples.push(val)
+    }
+
+    const coverage = matchCount / sampleRows.length
+    if (coverage < 0.5 || samples.length === 0) continue
+
+    const meta = guessFieldMeta(tag, attribute, samples)
+    candidates.push({ selector: relSel, meta, coverage, samples })
+  }
+
+  // Deduplicate by baseName — keep highest coverage per name
+  const byName = new Map<string, Candidate>()
+  for (const c of candidates) {
+    const existing = byName.get(c.meta.baseName)
+    if (!existing || c.coverage > existing.coverage) {
+      byName.set(c.meta.baseName, c)
+    }
+  }
+
+  const priorityOrder = ['title', 'image', 'url', 'price', 'date', 'count', 'author', 'text']
+  const sorted = Array.from(byName.values()).sort((a, b) => {
+    const pa = priorityOrder.indexOf(a.meta.baseName)
+    const pb = priorityOrder.indexOf(b.meta.baseName)
+    return (pa === -1 ? 99 : pa) - (pb === -1 ? 99 : pb)
+  })
+
+  const usedNames = new Set<string>()
+  return sorted.slice(0, 8).map((c) => {
+    let name = c.meta.baseName
+    let suffix = 2
+    while (usedNames.has(name)) name = `${c.meta.baseName}_${suffix++}`
+    usedNames.add(name)
+
+    return {
+      id: psbStableId('auto', name, c.selector, c.meta.attribute, 'row'),
+      name,
+      selector: c.selector,
+      selectorMode: 'css' as SelectorMode,
+      attribute: c.meta.attribute,
+      fieldType: c.meta.fieldType,
+      confidence: Math.round(c.coverage * 80) / 100,
+      reason: `Auto-detected in ${Math.round(c.coverage * 100)}% of rows.`,
+      scope: 'row' as const,
+      normalizer: c.meta.normalizer,
+    }
+  })
 }

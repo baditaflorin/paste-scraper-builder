@@ -357,6 +357,25 @@ select {
   color: var(--muted);
 }
 
+.next-page-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 11px;
+  flex-wrap: wrap;
+}
+
+.next-page-hint code {
+  font-family: monospace;
+  background: var(--panel-soft);
+  padding: 1px 4px;
+  border-radius: 3px;
+  color: var(--text);
+  word-break: break-all;
+}
+
 .inference-card.inferred {
   border-color: #99f6e4;
   background: var(--teal-soft);
@@ -503,6 +522,28 @@ th {
   background: #e0f2fe;
   font-size: 11px;
   text-transform: uppercase;
+}
+
+.exclude-row-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--muted);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.exclude-row-button:hover {
+  color: #e11d48;
+  border-color: #fecdd3;
+  background: #fff1f2;
 }
 
 .export-box {
