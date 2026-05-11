@@ -40,6 +40,7 @@ import {
   type AppSettings,
 } from './projectState'
 import { sampleHtml } from './sampleHtml'
+import { SAMPLE_GALLERY, findSample, loadSampleHtml } from './sampleGallery'
 import { extractPreview, inferFieldsFromRowSelector } from './selectorEngine'
 import { clearDraft, loadDraft, saveDraft } from './storage'
 import { parseHtml } from './dom'
@@ -299,6 +300,29 @@ export function ScraperBuilder() {
     setToast('Sample loaded.')
   }
 
+  const loadGallerySample = async (id: string) => {
+    const entry = findSample(id)
+    if (!entry) return
+    setToast(`Loading "${entry.title}"…`)
+    try {
+      const html = await loadSampleHtml(entry)
+      setProject(
+        updateTimestamp({
+          ...blankProject(),
+          html,
+          sourceUrl: entry.sourceUrl,
+        }),
+      )
+      setManualOverride(false)
+      setPickMode('row')
+      setFieldName('title')
+      setToast(`Loaded ${entry.title} (${entry.shape}, ~${entry.rowsApprox} rows).`)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error'
+      setToast(`Could not load sample: ${message}`)
+    }
+  }
+
   const applyHtmlInput = (html: string, sourceUrl?: string) => {
     setManualOverride(false)
     setProjectWithTimestamp((current) => ({
@@ -494,10 +518,38 @@ export function ScraperBuilder() {
               >
                 <Clipboard size={17} aria-hidden="true" />
               </button>
-              <button type="button" className="tool-button" onClick={loadSample}>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={loadSample}
+                title="Load the bundled 3-product demo (offline, no fetch)"
+              >
                 <Play size={16} aria-hidden="true" />
                 <span>Sample</span>
               </button>
+              <label className="sr-only" htmlFor="sample-gallery">
+                Load a real-page sample
+              </label>
+              <select
+                id="sample-gallery"
+                className="tool-button"
+                title="Load a real-page sample that exercises a specific page shape"
+                value=""
+                onChange={(event) => {
+                  const id = event.target.value
+                  if (id) {
+                    void loadGallerySample(id)
+                    event.target.value = ''
+                  }
+                }}
+              >
+                <option value="">Real-page sample…</option>
+                {SAMPLE_GALLERY.map((entry) => (
+                  <option key={entry.id} value={entry.id} title={entry.description}>
+                    {entry.title} — {entry.shape} (~{entry.rowsApprox} rows)
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
                 className="icon-button"

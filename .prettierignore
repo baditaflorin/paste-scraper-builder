@@ -3,6 +3,8 @@ coverage
 playwright-report
 test-results
 test/fixtures/realdata/*.html
+public/data/samples/*.html
+docs/data/samples/*.html
 docs/assets
 docs/index.html
 docs/404.html
