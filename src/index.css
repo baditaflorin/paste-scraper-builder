@@ -168,7 +168,9 @@ h2 {
 .segmented-control button,
 .export-tabs button,
 .copy-button {
-  min-height: 34px;
+  /* 44×44 minimum target per WCAG 2.5.5. The previous 34px buttons
+   * were almost impossible to hit on a portrait phone. */
+  min-height: 44px;
   border: 1px solid var(--border);
   border-radius: 7px;
   color: var(--text);
@@ -185,7 +187,7 @@ h2 {
 .tool-button,
 .copy-button {
   gap: 7px;
-  padding: 0 10px;
+  padding: 0 12px;
   text-decoration: none;
   font-size: 13px;
   font-weight: 700;
@@ -194,7 +196,8 @@ h2 {
 .icon-button {
   display: inline-grid;
   place-items: center;
-  width: 34px;
+  width: 44px;
+  min-width: 44px;
   padding: 0;
 }
 
@@ -351,8 +354,8 @@ select {
   gap: 5px;
   flex-shrink: 0;
   padding: 0 12px;
-  height: 32px;
-  font-size: 12px;
+  min-height: 44px;
+  font-size: 13px;
   font-weight: 700;
   color: #064e3b;
   background: var(--teal-soft);
@@ -384,7 +387,9 @@ select {
 
 /* Spinner animation */
 @keyframes spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spin {
@@ -783,5 +788,87 @@ th {
 
   .field-rule .icon-button {
     width: 100%;
+  }
+
+  /* WCAG-AA font floor for incidental text. 12px is sub-readable on a
+   * 6-inch phone in landscape mode. */
+  .brand-block p,
+  .field-label,
+  .status-pill,
+  .toast,
+  .empty-state,
+  .warnings,
+  .segmented-control button,
+  .export-tabs button {
+    font-size: 14px;
+  }
+
+  /* The 245px-tall paste box used to eat 60% of a portrait phone
+   * before the picker came into view. Halve it; the textarea stays
+   * vertically resizable for users who want more room. */
+  .html-input {
+    min-height: 120px;
+    font-size: 13px;
+  }
+
+  /* Keep the picker iframe useful but bounded on phones; without a
+   * cap it expanded until vertical scroll thrashed both the page
+   * and the iframe. 320px is enough to confirm the document loaded
+   * before the user paginates with their fingers. */
+  .picker-frame {
+    max-height: 320px;
+  }
+
+  /* Drive the three workspace panels through a tab switcher on
+   * phones (see .mobile-panel-switcher below). Without this the
+   * Source/Picker/Preview panels stacked into a 2000+ px page. */
+  .builder-grid.mobile-tabbed {
+    display: block;
+  }
+
+  .builder-grid.mobile-tabbed > .workspace-panel,
+  .builder-grid.mobile-tabbed > .output-panel {
+    display: none;
+  }
+
+  .builder-grid.mobile-tabbed > .workspace-panel.mobile-active,
+  .builder-grid.mobile-tabbed > .output-panel.mobile-active {
+    display: flex;
+  }
+}
+
+/* Mobile-only tab switcher. Hidden ≥721px so desktop keeps the
+ * three-column layout untouched. */
+.mobile-panel-switcher {
+  display: none;
+}
+
+@media (max-width: 720px) {
+  .mobile-panel-switcher {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    padding: 3px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #eef2f7;
+  }
+
+  .mobile-panel-switcher button {
+    min-height: 44px;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--text);
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+
+  .mobile-panel-switcher button.active {
+    color: #064e3b;
+    border-color: #99f6e4;
+    background: var(--teal-soft);
   }
 }

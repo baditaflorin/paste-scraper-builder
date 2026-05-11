@@ -782,7 +782,8 @@ const scanForRepeatedSiblings = (document: Document): { selector: string; count:
       if (skipTags.has(tag)) return
       // Must have at least 1 element child (not just a text leaf)
       if (!child.firstElementChild) return
-      const firstClass = Array.from(child.classList).find((c) => !/^(d-|flex|col-|row|mt|mb|ml|mr|pt|pb|pl|pr|gap|p-|m-)/.test(c)) ?? ''
+      const firstClass =
+        Array.from(child.classList).find((c) => !/^(d-|flex|col-|row|mt|mb|ml|mr|pt|pb|pl|pr|gap|p-|m-)/.test(c)) ?? ''
       const key = firstClass ? `${tag}.${firstClass}` : tag
       groups.set(key, (groups.get(key) ?? 0) + 1)
     })

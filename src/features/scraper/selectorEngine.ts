@@ -353,8 +353,7 @@ export const extractPreview = (project: ScraperProject): PreviewResult => {
 
   const previewIndexed = indexedRows.filter(
     ({ idx, data }) =>
-      !exclusions.has(idx) &&
-      (project.fields.length === 0 || Object.values(data).some((value) => value.trim())),
+      !exclusions.has(idx) && (project.fields.length === 0 || Object.values(data).some((value) => value.trim())),
   )
 
   project.fields.forEach((field) => {
@@ -383,10 +382,7 @@ const hasSimilarSiblings = (el: Element): boolean => {
   const tag = el.tagName
   const firstClass = Array.from(el.classList).find((c) => !ignoredClasses.has(c)) ?? ''
   const similar = Array.from(parent.children).filter(
-    (s) =>
-      s !== el &&
-      s.tagName === tag &&
-      (firstClass === '' || s.classList.contains(firstClass)),
+    (s) => s !== el && s.tagName === tag && (firstClass === '' || s.classList.contains(firstClass)),
   )
   return similar.length >= 2 // ≥3 total items (self + 2 siblings)
 }
@@ -580,9 +576,7 @@ export const inferFieldsFromRowSelector = (
       const matched = queryAll(row, relSel)
       if (matched.length !== 1) continue
       const val =
-        attribute === 'text'
-          ? normalizeText(matched[0].textContent)
-          : (matched[0].getAttribute(attribute) ?? '')
+        attribute === 'text' ? normalizeText(matched[0].textContent) : (matched[0].getAttribute(attribute) ?? '')
       if (!val.trim()) continue
       matchCount++
       if (samples.length < 3) samples.push(val)

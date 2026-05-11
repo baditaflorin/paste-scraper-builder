@@ -129,6 +129,11 @@ export function ScraperBuilder() {
   const [toast, setToast] = useState(initialSharedProject ? 'Project restored from share link.' : 'Ready.')
   const [manualOverride, setManualOverride] = useState(Boolean(initialSharedProject))
   const [fetching, setFetching] = useState(false)
+  // Mobile-only tab state. On desktop (≥721px) the CSS turns the
+  // .mobile-tabbed grid back into a 3-column layout and the active
+  // class is a no-op. On phones we render exactly one panel at a time
+  // so the user isn't scrolling through 2000+px of stacked content.
+  const [mobilePanel, setMobilePanel] = useState<'source' | 'picker' | 'preview'>('source')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const { meta, liveCommit } = useBuildStatus()
 
@@ -217,6 +222,15 @@ export function ScraperBuilder() {
     setProject((current) => updateTimestamp(updater(current)))
   }
 
+  // When the user picks something in the iframe on a phone, hop to the
+  // preview panel so they see the immediate result of their click
+  // instead of scrolling to find it.
+  const advanceMobileTo = (target: 'source' | 'picker' | 'preview') => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 720) {
+      setMobilePanel(target)
+    }
+  }
+
   const handlePickRow = (picked: PickedSelector) => {
     const rowSel = picked[selectorMode]
     setManualOverride(true)
@@ -236,6 +250,7 @@ export function ScraperBuilder() {
     setToast(
       'Row detected — fields auto-inferred. Click fields in the Picker to add more, or × to remove false positives.',
     )
+    advanceMobileTo('preview')
   }
 
   const handlePickField = (picked: PickedFieldSelector) => {
@@ -298,6 +313,7 @@ export function ScraperBuilder() {
     setPickMode('row')
     setFieldName('title')
     setToast('Sample loaded.')
+    advanceMobileTo('picker')
   }
 
   const loadGallerySample = async (id: string) => {
@@ -317,6 +333,7 @@ export function ScraperBuilder() {
       setPickMode('row')
       setFieldName('title')
       setToast(`Loaded ${entry.title} (${entry.shape}, ~${entry.rowsApprox} rows).`)
+      advanceMobileTo('picker')
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error'
       setToast(`Could not load sample: ${message}`)
@@ -475,9 +492,30 @@ export function ScraperBuilder() {
         </nav>
       </header>
 
-      <main className="builder-grid">
+      <div className="mobile-panel-switcher" role="tablist" aria-label="Switch panel">
+        {(
+          [
+            { id: 'source', label: 'Source' },
+            { id: 'picker', label: 'Picker' },
+            { id: 'preview', label: 'Preview' },
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            role="tab"
+            aria-selected={mobilePanel === tab.id}
+            className={mobilePanel === tab.id ? 'active' : ''}
+            onClick={() => setMobilePanel(tab.id)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      <main className="builder-grid mobile-tabbed">
         <section
-          className="workspace-panel input-panel"
+          className={`workspace-panel input-panel${mobilePanel === 'source' ? ' mobile-active' : ''}`}
           aria-labelledby="input-heading"
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
@@ -621,10 +659,7 @@ export function ScraperBuilder() {
               <div className="next-page-row">
                 <span className="field-label">Next page</span>
                 <div className="next-page-controls">
-                  <code
-                    className="next-page-url"
-                    title={inference.nextPageUrl}
-                  >
+                  <code className="next-page-url" title={inference.nextPageUrl}>
                     {inference.nextPageUrl.length > 55
                       ? `${inference.nextPageUrl.slice(0, 55)}…`
                       : inference.nextPageUrl}
@@ -649,7 +684,9 @@ export function ScraperBuilder() {
           </div>
 
           <div className={`inference-card ${inference.status}`}>
-            <strong>{inference.shape === 'empty' ? 'Enter a URL or paste HTML below' : `Detected ${inference.shape}`}</strong>
+            <strong>
+              {inference.shape === 'empty' ? 'Enter a URL or paste HTML below' : `Detected ${inference.shape}`}
+            </strong>
             <span>
               {inference.shape !== 'empty' &&
                 `${confidenceLabel(inference.confidence)} confidence · ${preview.rowCount} rows · ${inference.strategy}`}
@@ -764,7 +801,10 @@ export function ScraperBuilder() {
           </div>
         </section>
 
-        <section className="workspace-panel picker-panel" aria-labelledby="picker-heading">
+        <section
+          className={`workspace-panel picker-panel${mobilePanel === 'picker' ? ' mobile-active' : ''}`}
+          aria-labelledby="picker-heading"
+        >
           <div className="panel-heading">
             <h2 id="picker-heading">Picker</h2>
             <span className="status-pill">{preview.rowCount} rows</span>
@@ -781,7 +821,10 @@ export function ScraperBuilder() {
           />
         </section>
 
-        <section className="workspace-panel output-panel" aria-labelledby="output-heading">
+        <section
+          className={`workspace-panel output-panel${mobilePanel === 'preview' ? ' mobile-active' : ''}`}
+          aria-labelledby="output-heading"
+        >
           <div className="panel-heading">
             <h2 id="output-heading">Preview</h2>
             <div className="button-row">
@@ -865,8 +908,7 @@ export function ScraperBuilder() {
 
           {(inference.status === 'low_confidence' ||
             inference.status === 'partial' ||
-            (project.fields.length > 0 &&
-              project.fields.every((f) => f.selector.includes(':nth-of-type')))) && (
+            (project.fields.length > 0 && project.fields.every((f) => f.selector.includes(':nth-of-type')))) && (
             <div className="action-tip" role="status">
               <span>
                 {project.fields.length > 0 && project.fields.every((f) => f.selector.includes(':nth-of-type'))
@@ -884,11 +926,7 @@ export function ScraperBuilder() {
                 >
                   → Pick a row
                 </button>
-                <button
-                  type="button"
-                  className="tip-button tip-button--reset"
-                  onClick={() => void resetProject()}
-                >
+                <button type="button" className="tip-button tip-button--reset" onClick={() => void resetProject()}>
                   ↺ Reset
                 </button>
               </div>
